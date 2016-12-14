@@ -48,13 +48,14 @@ type TreeEntry struct {
 
 // PathStats is used to hold additional information about paths involved in Merkle proofs.
 type PathStats struct {
-	PathToRootCalls int      // Number of times pathToRootAtSnapshot was called
-	NodesRecomputed int      // Number of nodes rehashed during recomputations
-	ProofInfo       []string // Explanatory text about the operations done computing the path
+	PathToRootCalls    int      // Number of times pathToRootAtSnapshot was called
+	NodesRecomputed    int      // Number of nodes rehashed during recomputations
+	SubtreesRecomputed int      // Number of times we rehash a subtree
+	ProofInfo          []string // Explanatory text about the operations done computing the path
 }
 
 func (p PathStats) string() string {
-	return fmt.Sprintf("PfNtRaS: %d Recomputed: %d, Info: %v", p.PathToRootCalls, p.NodesRecomputed, p.ProofInfo)
+	return fmt.Sprintf("R: %d, PfNtRaS: %d Recomputed: %d, Info: %v", p.SubtreesRecomputed, p.PathToRootCalls, p.NodesRecomputed, p.ProofInfo)
 }
 
 func (p *PathStats) recordInfo(s string) {
@@ -422,6 +423,10 @@ func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel in
 
 	if node != nil && nodeLevel == level {
 		*node = subtreeRoot
+	}
+
+	if lastNode != 0 {
+		stats.SubtreesRecomputed++
 	}
 
 	for lastNode != 0 {
