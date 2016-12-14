@@ -425,12 +425,14 @@ func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel in
 		*node = subtreeRoot
 	}
 
-	if lastNode != 0 {
-		stats.SubtreesRecomputed++
-	}
-
+	recomputed := false
 	for lastNode != 0 {
 		if isRightChild(lastNode) {
+			if !recomputed {
+				stats.SubtreesRecomputed++
+				recomputed = true
+			}
+
 			// Recompute the parent of tree_[level][last_node].
 			stats.NodesRecomputed++
 			stats.recordInfo(fmt.Sprintf("Recompute parent %d, l:%d", lastNode, level))

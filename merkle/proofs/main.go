@@ -51,7 +51,7 @@ func showProofRecomputationMatrix(mt *merkle.InMemoryMerkleTree, snapshot int) {
 		for i := 1; i <= s; i++ {
 			_, stats := mt.PathToRootAtSnapshot(i, s)
 			trees++
-			matrix[i - 1][s - 1] = stats.NodesRecomputed
+			matrix[i - 1][s - 1] = stats.SubtreesRecomputed
 			if matrix[i - 1][s - 1] == 0 {
 				// Mark it differently to a path that is never computed
 				matrix[i - 1][s - 1] = -1
