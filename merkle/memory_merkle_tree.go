@@ -32,11 +32,33 @@ package merkle
 import (
 	"errors"
 	"fmt"
+	"encoding/hex"
+)
+
+const (
+	accessLastNode string = "LN"
+	accessMoveUp string = "MU"
+	accessRecord string = "RN"
 )
 
 // TreeEntry is used for nodes in the tree for better readability. Just holds a hash but could be extended
 type TreeEntry struct {
 	hash []byte
+}
+
+// PathStats is used to hold additional information about paths involved in Merkle proofs.
+type PathStats struct {
+	PathToRootCalls int      // Number of times pathToRootAtSnapshot was called
+	NodesRecomputed int      // Number of nodes rehashed during recomputations
+	ProofInfo       []string // Explanatory text about the operations done computing the path
+}
+
+func (p PathStats) string() string {
+	return fmt.Sprintf("PfNtRaS: %d Recomputed: %d, Info: %v", p.PathToRootCalls, p.NodesRecomputed, p.ProofInfo)
+}
+
+func (p *PathStats) recordInfo(s string) {
+	p.ProofInfo = append(p.ProofInfo, s)
 }
 
 // Hash returns the current hash in a newly created byte slice that the caller owns and may modify.
@@ -58,9 +80,14 @@ func (t TreeEntry) HashInto(dest []byte) []byte {
 // TreeEntryDescriptor wraps a node and is used to describe tree paths, which are useful to have
 // access to when testing the code and examining how it works
 type TreeEntryDescriptor struct {
-	Value  TreeEntry
-	XCoord int64 // The horizontal node coordinate
-	YCoord int64 // The vertical node coordinate
+	Value      TreeEntry
+	XCoord     int64  // The horizontal node coordinate
+	YCoord     int64  // The vertical node coordinate
+	AccessType string // The type of tree access
+}
+
+func (t TreeEntryDescriptor) string() string {
+	return fmt.Sprintf("%s (%d, %d) %s\n", hex.EncodeToString(t.Value.hash), t.YCoord, t.XCoord, t.AccessType)
 }
 
 // InMemoryMerkleTree holds a Merkle Tree in memory as a 2D node array
@@ -278,15 +305,15 @@ func (mt *InMemoryMerkleTree) RootAtSnapshot(snapshot int64) TreeEntry {
 	}
 
 	if snapshot >= mt.leavesProcessed {
-		return mt.updateToSnapshot(snapshot)
+		return mt.updateToSnapshot(snapshot, &PathStats{})
 	}
 
 	// snapshot < leaves_processed_: recompute the snapshot root.
-	return mt.recomputePastSnapshot(snapshot, 0, nil)
+	return mt.recomputePastSnapshot(snapshot, 0, nil, &PathStats{})
 }
 
 // updateToSnapshot updates the tree to a given snapshot (if necessary), returns the root.
-func (mt *InMemoryMerkleTree) updateToSnapshot(snapshot int64) TreeEntry {
+func (mt *InMemoryMerkleTree) updateToSnapshot(snapshot int64, stats *PathStats) TreeEntry {
 	if snapshot == 0 {
 		return TreeEntry{mt.hasher.HashEmpty()}
 	}
@@ -349,13 +376,14 @@ func (mt *InMemoryMerkleTree) updateToSnapshot(snapshot int64) TreeEntry {
 
 // recomputePastSnapshot returns the root of the tree as it was for a past snapshot.
 // If node is not nil, additionally records the rightmost node for the given snapshot and node_level.
-func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel int64, node *TreeEntry) TreeEntry {
+func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel int64, node *TreeEntry, stats *PathStats) TreeEntry {
 	level := int64(0)
 	// Index of the rightmost node at the current level for this snapshot.
 	lastNode := snapshot - 1
 
 	if snapshot == mt.leavesProcessed {
 		// Nothing to recompute.
+		stats.recordInfo(fmt.Sprintf("No recompute needed s:%d", snapshot))
 		if node != nil && mt.lazyLevelCount() > nodeLevel {
 			if nodeLevel > 0 {
 				*node = mt.lastNode(nodeLevel)
@@ -373,19 +401,23 @@ func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel in
 	}
 
 	// Recompute nodes on the path of the last leaf.
+	stats.recordInfo(fmt.Sprintf("Recompute s:%d l:%d", snapshot, mt.leavesProcessed))
 	for isRightChild(lastNode) {
+		stats.recordInfo(fmt.Sprintf("Right child %d, l:%d", lastNode, level))
 		if node != nil && nodeLevel == level {
 			*node = mt.tree[level][lastNode]
 		}
 
 		// Left sibling and parent exist in the snapshot, and are equal to
 		// those in the tree; no need to rehash, move one level up.
+		stats.recordInfo("Move up, still recomputing")
 		lastNode = parent(lastNode)
 		level++
 	}
 
 	// Now last_node is the index of a left sibling with no right sibling.
 	// Record the node.
+	stats.recordInfo(fmt.Sprintf("Left with no right sibling %d, l:%d", lastNode, level))
 	subtreeRoot := mt.tree[level][lastNode]
 
 	if node != nil && nodeLevel == level {
@@ -395,6 +427,8 @@ func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel in
 	for lastNode != 0 {
 		if isRightChild(lastNode) {
 			// Recompute the parent of tree_[level][last_node].
+			stats.NodesRecomputed++
+			stats.recordInfo(fmt.Sprintf("Recompute parent %d, l:%d", lastNode, level))
 			subtreeRoot = TreeEntry{mt.hasher.HashChildren(mt.tree[level][lastNode-1].hash, subtreeRoot.hash)}
 		}
 		// Else the parent is a dummy copy of the current node; do nothing.
@@ -406,6 +440,8 @@ func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel in
 		}
 	}
 
+	stats.recordInfo("Recompute done")
+
 	return subtreeRoot
 }
 
@@ -416,7 +452,7 @@ func (mt *InMemoryMerkleTree) recomputePastSnapshot(snapshot int64, nodeLevel in
 // is one below the root.
 // Returns an empty slice if the tree is not large enough
 // or the leaf index is 0.
-func (mt *InMemoryMerkleTree) PathToCurrentRoot(leaf int64) []TreeEntryDescriptor {
+func (mt *InMemoryMerkleTree) PathToCurrentRoot(leaf int64) ([]TreeEntryDescriptor, PathStats) {
 	return mt.PathToRootAtSnapshot(leaf, mt.LeafCount())
 }
 
@@ -427,33 +463,35 @@ func (mt *InMemoryMerkleTree) PathToCurrentRoot(leaf int64) []TreeEntryDescripto
 // last element is one below the root.  Returns an empty slice if
 // the leaf index is 0, the snapshot requested is in the future or
 // the snapshot tree is not large enough.
-func (mt *InMemoryMerkleTree) PathToRootAtSnapshot(leaf int64, snapshot int64) []TreeEntryDescriptor {
+func (mt *InMemoryMerkleTree) PathToRootAtSnapshot(leaf int64, snapshot int64) ([]TreeEntryDescriptor, PathStats) {
 	if leaf > snapshot || snapshot > mt.LeafCount() || leaf == 0 {
-		return []TreeEntryDescriptor{}
+		return []TreeEntryDescriptor{}, PathStats{}
 	}
 
-	return mt.pathFromNodeToRootAtSnapshot(leaf-1, 0, snapshot)
+	return mt.pathFromNodeToRootAtSnapshot(leaf - 1, 0, snapshot, &PathStats{})
 }
 
 // pathFromNodeToRootAtSnapshot returns the path from a node at a given level
 // (both indexed starting with 0) to the root at a given snapshot.
-func (mt *InMemoryMerkleTree) pathFromNodeToRootAtSnapshot(node int64, level int64, snapshot int64) []TreeEntryDescriptor {
+func (mt *InMemoryMerkleTree) pathFromNodeToRootAtSnapshot(node int64, level int64, snapshot int64, stats *PathStats) ([]TreeEntryDescriptor, PathStats) {
 	var path []TreeEntryDescriptor
 
+	stats.PathToRootCalls++
+
 	if snapshot == 0 {
-		return path
+		return path, *stats
 	}
 
 	// Index of the last node.
 	lastNode := (snapshot - 1) >> uint64(level)
 
 	if level >= mt.levelCount || node > lastNode || snapshot > mt.LeafCount() {
-		return path
+		return path, *stats
 	}
 
 	if snapshot > mt.leavesProcessed {
 		// Bring the tree sufficiently up to date.
-		mt.updateToSnapshot(snapshot)
+		mt.updateToSnapshot(snapshot, stats)
 	}
 
 	// Move up, recording the sibling of the current node at each level.
@@ -463,34 +501,36 @@ func (mt *InMemoryMerkleTree) pathFromNodeToRootAtSnapshot(node int64, level int
 		if sibling < lastNode {
 			// The sibling is not the last node of the level in the snapshot
 			// tree, so its value is correct in the tree.
-			path = append(path, TreeEntryDescriptor{mt.tree[level][sibling], level, sibling})
+			path = append(path, TreeEntryDescriptor{AccessType:accessMoveUp, Value:mt.tree[level][sibling], YCoord:level, XCoord:sibling})
 		} else if sibling == lastNode {
 			// The sibling is the last node of the level in the snapshot tree,
 			// so we get its value for the snapshot. Get the root in the same pass.
 			var recomputeNode TreeEntry
 
-			mt.recomputePastSnapshot(snapshot, level, &recomputeNode)
-			path = append(path, TreeEntryDescriptor{recomputeNode, -level, -sibling})
+			mt.recomputePastSnapshot(snapshot, level, &recomputeNode, stats)
+			path = append(path, TreeEntryDescriptor{AccessType:accessLastNode, Value:recomputeNode, YCoord:level, XCoord:sibling})
 		}
 		// Else sibling > last_node so the sibling does not exist. Do nothing.
 		// Continue moving up in the tree, ignoring dummy copies.
+		stats.recordInfo(fmt.Sprintf("Move up l:%d, n:%d", level, node))
 		node = parent(node)
 		lastNode = parent(lastNode)
 		level++
 	}
 
-	return path
+	return path, *stats
 }
 
 // SnapshotConsistency gets the Merkle consistency proof between two snapshots.
 // Returns a slice of node hashes, ordered according to levels.
 // Returns an empty slice if snapshot1 is 0, snapshot 1 >= snapshot2,
 // or one of the snapshots requested is in the future.
-func (mt *InMemoryMerkleTree) SnapshotConsistency(snapshot1 int64, snapshot2 int64) []TreeEntryDescriptor {
+func (mt *InMemoryMerkleTree) SnapshotConsistency(snapshot1 int64, snapshot2 int64) ([]TreeEntryDescriptor, PathStats) {
 	var proof []TreeEntryDescriptor
+	var stats PathStats
 
 	if snapshot1 == 0 || snapshot1 >= snapshot2 || snapshot2 > mt.LeafCount() {
-		return proof
+		return proof, stats
 	}
 
 	level := int64(0)
@@ -506,16 +546,16 @@ func (mt *InMemoryMerkleTree) SnapshotConsistency(snapshot1 int64, snapshot2 int
 
 	if snapshot2 > mt.leavesProcessed {
 		// Bring the tree sufficiently up to date.
-		mt.updateToSnapshot(snapshot2)
+		mt.updateToSnapshot(snapshot2, &stats)
 	}
 
 	// Record the node, unless we already reached the root of snapshot1.
 	if node != 0 {
-		proof = append(proof, TreeEntryDescriptor{mt.tree[level][node], level, node})
+		proof = append(proof, TreeEntryDescriptor{AccessType:accessRecord, Value:mt.tree[level][node], YCoord:level, XCoord:node})
 	}
 
 	// Now record the path from this node to the root of snapshot2.
-	path := mt.pathFromNodeToRootAtSnapshot(node, level, snapshot2)
+	path, stats := mt.pathFromNodeToRootAtSnapshot(node, level, snapshot2, &stats)
 
-	return append(proof, path...)
+	return append(proof, path...), stats
 }

@@ -443,12 +443,7 @@ func TestMerkleTreePathFuzz(t *testing.T) {
 			// A leaf in the range 0... snapshot.
 			leaf := rand.Int63n(snapshot + 1)
 
-			p1 := mt.PathToRootAtSnapshot(leaf, snapshot)
-
-			//for i, p := range p1 {
-			//	t.Logf("P %d: %d %d %v", i, p.xCoord, p.yCoord, p.value)
-			//}
-
+			p1, _ := mt.PathToRootAtSnapshot(leaf, snapshot)
 			p2 := referenceMerklePath(data[:snapshot], leaf, mt.hasher)
 
 			if len(p1) != len(p2) {
@@ -484,7 +479,7 @@ func TestMerkleTreeConsistencyFuzz(t *testing.T) {
 			// A snapshot in the range 0... snapshot.
 			snapshot1 := rand.Int63n(snapshot2 + 1)
 
-			c1 := mt.SnapshotConsistency(snapshot1, snapshot2)
+			c1, _ := mt.SnapshotConsistency(snapshot1, snapshot2)
 			c2 := referenceSnapshotConsistency(data[:snapshot2], snapshot2,
 				snapshot1, mt.hasher, true)
 
@@ -521,12 +516,13 @@ func TestMerkleTreePathBuildOnce(t *testing.T) {
 			hex.EncodeToString(mt.CurrentRoot().hash), rootsAtSize[7])
 	}
 
-	if len(mt.PathToCurrentRoot(9)) > 0 {
-		t.Fatalf("Obtained a path for non existent leaf 9: %v", mt.PathToCurrentRoot(9))
+	p, _ := mt.PathToCurrentRoot(9)
+	if len(p) > 0 {
+		t.Fatalf("Obtained a path for non existent leaf 9: %v", p)
 	}
 
 	for i := 0; i < 6; i++ {
-		p1 := mt.PathToRootAtSnapshot(testPaths[i].leaf, testPaths[i].snapshot)
+		p1, _ := mt.PathToRootAtSnapshot(testPaths[i].leaf, testPaths[i].snapshot)
 
 		var p2 []string
 
@@ -558,8 +554,8 @@ func TestMerkleTreePathBuildIncrementally(t *testing.T) {
 
 	mt2 := makeEmptyTree()
 
-	p1 := mt2.PathToCurrentRoot(0)
-	p2 := mt.PathToRootAtSnapshot(0, 0)
+	p1, _ := mt2.PathToCurrentRoot(0)
+	p2, _ := mt.PathToRootAtSnapshot(0, 0)
 
 	if len(p1) != 0 || len(p2) != 0 {
 		t.Errorf("Path mismatch at root for snapshot 0: %d %d", len(p1), len(p2))
@@ -570,12 +566,11 @@ func TestMerkleTreePathBuildIncrementally(t *testing.T) {
 		mt2.AddLeaf(decodeHexStringOrPanic(leafInputs[i]))
 
 		for j := int64(0); j <= i+1; j++ {
-			p1 := mt.PathToRootAtSnapshot(j, i+1)
-			p2 := mt2.PathToCurrentRoot(j)
+			p1, _ := mt.PathToRootAtSnapshot(j, i + 1)
+			p2, _ := mt2.PathToCurrentRoot(j)
 
 			if len(p1) != len(p2) {
-				t.Errorf("Different path lengths %d %d", len(p1), len(p2))
-				t.FailNow()
+				t.Fatalf("Different path lengths %d %d", len(p1), len(p2))
 			}
 
 			for j := 0; j < len(p2); j++ {
@@ -587,9 +582,9 @@ func TestMerkleTreePathBuildIncrementally(t *testing.T) {
 		}
 
 		for k := i + 2; k <= 9; k++ {
-			if len(mt.PathToRootAtSnapshot(k, i+1)) != 0 {
-				t.Errorf("Got non empty path unexpectedly: %d %d %d", i, k,
-					len(mt.PathToRootAtSnapshot(k, i+1)))
+			p, _ := mt.PathToRootAtSnapshot(k, i + 1)
+			if len(p) != 0 {
+				t.Errorf("Got non empty path unexpectedly: %d %d %d", i, k, len(p))
 			}
 		}
 	}
@@ -614,7 +609,7 @@ func TestProofConsistencyTestVectors(t *testing.T) {
 	}
 
 	for i := 0; i < 4; i++ {
-		p1 := mt.SnapshotConsistency(testProofs[i].snapshot1, testProofs[i].snapshot2)
+		p1, _ := mt.SnapshotConsistency(testProofs[i].snapshot1, testProofs[i].snapshot2)
 
 		var p2 []string
 		for j := int64(0); j < testProofs[i].proofLength; j++ {
