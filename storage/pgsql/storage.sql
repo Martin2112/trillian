@@ -70,18 +70,18 @@ CREATE TABLE IF NOT EXISTS LeafData(
   TreeId               INTEGER NOT NULL,
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit and
   -- for deduping. It is not the leaf hash output of the treehasher used by the log.
-  LeafValueHash        BYTEA CHECK (LeafValueHash IS NOT NULL And length(LeafValueHash) <= 255),
+  LeafIdentityHash        BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
   -- This is the data stored in the leaf for example in CT it contains a DER encoded
   -- X.509 certificate but is application dependent
   LeafValue            BYTEA CHECK (LeafValue IS NOT NULL),
   -- This is extra data that the application can associate with the leaf should it wish to.
   -- This data is not included in signing and hashing.
   ExtraData            BYTEA,
-  PRIMARY KEY(TreeId, LeafValueHash),
+  PRIMARY KEY(TreeId, LeafIdentityHash),
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE
 );
 
-CREATE INDEX LeafHashIdx ON LeafData(LeafValueHash);
+CREATE INDEX LeafHashIdx ON LeafData(LeafIdentityHash);
 
 -- When a leaf is sequenced a row is added to this table. If logs allow duplicates then
 -- multiple rows will exist with different sequence numbers. The signed timestamp
@@ -94,20 +94,20 @@ CREATE TABLE IF NOT EXISTS SequencedLeafData(
   SequenceNumber       BIGINT NOT NULL CHECK(SequenceNumber >= 0),
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit.
   -- It is not the leaf hash output of the treehasher used by the log.
-  LeafValueHash        BYTEA CHECK (LeafValueHash IS NOT NULL And length(LeafValueHash) <= 255),
+  LeafIdentityHash        BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
   -- This is a MerkleLeafHash as defined by the treehasher that the log uses. For example for
   -- CT this hash will include the leaf prefix byte as well as the leaf data.
   MerkleLeafHash       BYTEA CHECK (MerkleLeafHash IS NOT NULL And length(MerkleLeafHash) <= 255),
   PRIMARY KEY(TreeId, SequenceNumber),
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE,
-  FOREIGN KEY(TreeId, LeafValueHash) REFERENCES LeafData(TreeId, LeafValueHash)
+  FOREIGN KEY(TreeId, LeafIdentityHash) REFERENCES LeafData(TreeId, LeafIdentityHash)
 );
 
 CREATE TABLE IF NOT EXISTS Unsequenced(
   TreeId               INTEGER NOT NULL,
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit.
   -- It is not the leaf hash output of the treehasher used by the log.
-  LeafValueHash        BYTEA CHECK (LeafValueHash IS NOT NULL And length(LeafValueHash) <= 255),
+  LeafIdentityHash        BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
   -- This is a MerkleLeafHash as defined by the treehasher that the log uses. For example for
   -- CT this hash will include the leaf prefix byte as well as the leaf data.
   MerkleLeafHash       BYTEA CHECK (MerkleLeafHash IS NOT NULL And length(MerkleLeafHash) <= 255),
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
   MessageId            BYTEA CHECK (MessageId IS NOT NULL And length(MessageId) <= 32),
   Payload              BYTEA CHECK (Payload is NOT NULL),
   QueueTimestampNanos  BIGINT NOT NULL,
-  PRIMARY KEY (TreeId, LeafValueHash, MessageId)
+  PRIMARY KEY (TreeId, LeafIdentityHash, MessageId)
 );
 
 
@@ -149,3 +149,22 @@ CREATE TABLE IF NOT EXISTS MapHead(
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE
 );
 
+CREATE OR REPLACE FUNCTION upsert_trees(tid INTEGER, kid BYTEA, tt VARCHAR) RETURNS VOID AS $$
+DECLARE
+BEGIN
+    UPDATE Trees SET KeyID = kid, TreeType = tt::TreeTypeEnum WHERE TreeID = tid;
+    IF NOT FOUND THEN
+        INSERT INTO Trees VALUES(tid, kid, tt::TreeTypeEnum, 'SHA256', 'SHA256');
+    END IF;
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE OR REPLACE FUNCTION upsert_leafdata(tid INTEGER, lih BYTEA, lv BYTEA, ed BYTEA) RETURNS VOID AS $$
+DECLARE
+BEGIN
+    UPDATE LeafData SET LeafIdentityHash=lih;
+    IF NOT FOUND THEN
+        INSERT INTO LeafData VALUES(tid, lih, lv, ed);
+    END IF;
+END
+$$ LANGUAGE 'plpgsql';

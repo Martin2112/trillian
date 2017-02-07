@@ -1,16 +1,17 @@
 -- Caution - this removes all tables in our schema
 
+DROP FUNCTION upsert_trees(INTEGER, BYTEA, VARCHAR);
+DROP FUNCTION upsert_leafdata(INTEGER, BYTEA, BYTEA, BYTEA);
+
 DROP TABLE IF EXISTS Unsequenced;
 DROP TABLE IF EXISTS Subtree;
 DROP TABLE IF EXISTS SequencedLeafData;
 DROP TABLE IF EXISTS TreeHead;
 DROP TABLE IF EXISTS LeafData;
-DROP TABLE IF EXISTS MapLeaf;
-DROP TABLE IF EXISTS MapHead;
 DROP TABLE IF EXISTS TreeControl;
 DROP TABLE IF EXISTS MapHead;
 DROP TABLE IF EXISTS MapLeaf;
 DROP TABLE IF EXISTS Trees;
 
-DROP TYPE TreeEnumType;
+DROP TYPE TreeTypeEnum;
 DROP TYPE HasherTypeEnum;
