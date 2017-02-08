@@ -434,6 +434,7 @@ func (t *treeTX) Commit() error {
 	t.closed = true
 	if err := t.tx.Commit(); err != nil {
 		glog.Warningf("TX commit error: %s", err)
+		return err
 	}
 	return nil
 }
@@ -442,6 +443,7 @@ func (t *treeTX) Rollback() error {
 	t.closed = true
 	if err := t.tx.Rollback(); err != nil {
 		glog.Warningf("TX rollback error: %s", err)
+		return err
 	}
 	return nil
 }
