@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS LeafData(
   TreeId               INTEGER NOT NULL,
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit and
   -- for deduping. It is not the leaf hash output of the treehasher used by the log.
-  LeafIdentityHash        BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
+  LeafIdentityHash     BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
   -- This is the data stored in the leaf for example in CT it contains a DER encoded
   -- X.509 certificate but is application dependent
   LeafValue            BYTEA CHECK (LeafValue IS NOT NULL),
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS SequencedLeafData(
   SequenceNumber       BIGINT NOT NULL CHECK(SequenceNumber >= 0),
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit.
   -- It is not the leaf hash output of the treehasher used by the log.
-  LeafIdentityHash        BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
+  LeafIdentityHash     BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
   -- This is a MerkleLeafHash as defined by the treehasher that the log uses. For example for
   -- CT this hash will include the leaf prefix byte as well as the leaf data.
   MerkleLeafHash       BYTEA CHECK (MerkleLeafHash IS NOT NULL And length(MerkleLeafHash) <= 255),
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
   TreeId               INTEGER NOT NULL,
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit.
   -- It is not the leaf hash output of the treehasher used by the log.
-  LeafIdentityHash        BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
+  LeafIdentityHash     BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
   -- This is a MerkleLeafHash as defined by the treehasher that the log uses. For example for
   -- CT this hash will include the leaf prefix byte as well as the leaf data.
   MerkleLeafHash       BYTEA CHECK (MerkleLeafHash IS NOT NULL And length(MerkleLeafHash) <= 255),
