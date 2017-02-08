@@ -27,6 +27,11 @@ const (
 			AND QueueTimestampNanos<=$2
 			ORDER BY QueueTimestampNanos,LeafIdentityHash ASC LIMIT $3`
 	insertUnsequencedLeafSQL = `SELECT upsert_leafdata($1,$2,$3,$4)`
+	// support for ON CONFLICT clause was added in postgres 9.5
+	insertUnsequencedLeafSQL95 = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
+			VALUES($1,$2,$3,$4)
+			ON CONFLICT(TreeID,LeafIdentityHash)
+			DO UPDATE SET LeafIdentityHash=$2`
 	insertUnsequencedLeafSQLNoDuplicates = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
 			VALUES($1,$2,$3,$4)`
 	insertUnsequencedEntrySQL = `INSERT INTO Unsequenced(TreeId,LeafIdentityHash,MerkleLeafHash,MessageId,Payload,QueueTimestampNanos)
@@ -269,7 +274,11 @@ func (t *logTreeTX) QueueLeaves(leaves []trillian.LogLeaf, queueTimestamp time.T
 	var insertSQL string
 
 	if t.allowDuplicates {
-		insertSQL = insertUnsequencedLeafSQL
+		if t.ls.useOnConflict {
+			insertSQL = insertUnsequencedLeafSQL
+		} else {
+			insertSQL = insertUnsequencedLeafSQL95
+		}
 	} else {
 		insertSQL = insertUnsequencedLeafSQLNoDuplicates
 	}

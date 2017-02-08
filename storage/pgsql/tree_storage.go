@@ -12,6 +12,7 @@ import (
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
 	"github.com/google/trillian/storage/storagepb"
+	"strconv"
 )
 
 // These statements are fixed
@@ -49,9 +50,12 @@ type pgSQLTreeStorage struct {
 	// in the query to the statement that should be used.
 	statementMutex sync.Mutex
 	statements     map[string]map[int]*sql.Stmt
+	// If true then the server version should support use of the ON CONFLICT clause for
+	// INSERT statements
+	useOnConflict  bool
 }
 
-// OpenDB opens a database connection for all MySQL-based storage implementations.
+// OpenDB opens a database connection for all postgres-based storage implementations.
 func OpenDB(dbURL string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -59,19 +63,31 @@ func OpenDB(dbURL string) (*sql.DB, error) {
 		glog.Warningf("Could not open postgres database, check config: %s", err)
 		return nil, err
 	}
-
-	//if _, err := db.Exec("SET sql_mode = 'STRICT_ALL_TABLES'"); err != nil {
-	//	glog.Warningf("Failed to set strict mode on mysql db: %s", err)
-	//	return nil, err
-	//}
-
 	return db, nil
 }
 
 func newTreeStorage(db *sql.DB) *pgSQLTreeStorage {
+	// Try to find the version and enable suitable options. If this fails we'll just use
+	// the default options and continue silently.
+	atLeast95 := false
+	var version string
+	if err := db.QueryRow("SHOW server_version").Scan(&version); err == nil {
+		v := strings.SplitN(version, ".", 3)
+		major, err := strconv.ParseInt(v[0], 10, 32)
+		minor, err2 := strconv.ParseInt(v[1], 10, 32)
+
+		if err == nil && err2 == nil {
+			if major > 9 || (major == 9 && minor >= 5) {
+				atLeast95 = true
+				glog.V(1).Info("9.5+ server - ON CONFLICT enabled")
+			}
+		}
+	}
+
 	return &pgSQLTreeStorage{
-		db:         db,
-		statements: make(map[string]map[int]*sql.Stmt),
+		db:            db,
+		statements:    make(map[string]map[int]*sql.Stmt),
+		useOnConflict: atLeast95,
 	}
 }
 
