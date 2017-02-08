@@ -26,8 +26,7 @@ const (
 			WHERE TreeID=$1
 			AND QueueTimestampNanos<=$2
 			ORDER BY QueueTimestampNanos,LeafIdentityHash ASC LIMIT $3`
-	insertUnsequencedLeafSQL = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
-			VALUES($1,$2,$3,$4) ON DUPLICATE KEY UPDATE LeafIdentityHash=LeafIdentityHash`
+	insertUnsequencedLeafSQL = `SELECT upsert_leafdata($1,$2,$3,$4)`
 	insertUnsequencedLeafSQLNoDuplicates = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
 			VALUES($1,$2,$3,$4)`
 	insertUnsequencedEntrySQL = `INSERT INTO Unsequenced(TreeId,LeafIdentityHash,MerkleLeafHash,MessageId,Payload,QueueTimestampNanos)
