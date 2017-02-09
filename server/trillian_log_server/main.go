@@ -27,13 +27,13 @@ import (
 	"github.com/golang/glog"
 	"github.com/google/trillian"
 	"github.com/google/trillian/extension"
-	"github.com/google/trillian/extension/builtin"
 	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/server"
 	"github.com/google/trillian/util"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"github.com/google/trillian/extension/postgres"
 )
 
 var (
@@ -96,8 +96,8 @@ func main() {
 	glog.CopyStandardLogTo("WARNING")
 	glog.Info("**** Log RPC Server Starting ****")
 
-	// First make sure we can access the database and keys, quit if not
-	registry, err := builtin.NewDefaultExtensionRegistry()
+	// First make sure we can access the database, quit if not
+	registry, err := postgres.NewPostgresExtensionRegistry()
 	if err != nil {
 		glog.Exitf("Failed to create extension registry: %v", err)
 	}

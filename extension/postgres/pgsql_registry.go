@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package postgres
 
 import (
 	"database/sql"
@@ -26,7 +26,7 @@ import (
 )
 
 // pgSQLURIFlag is the postgres db connection string.
-var pgSQLURIFlag = flag.String("pgsql_uri", "postgres://test:zaphod@localhost/test",
+var postgresURIFlag = flag.String("pgsql_uri", "postgres://test:zaphod@localhost/test",
 	"uri to use with postgres storage")
 
 // pgsql implementation of extension.Registry.
@@ -45,8 +45,8 @@ func (r *pgsqlRegistry) GetMapStorage() (storage.MapStorage, error) {
 // NewDefaultExtensionRegistry returns the default extension.Registry implementation, which is
 // backed by a MySQL database and configured via flags.
 // The returned registry is wraped in a cached registry.
-func NewDefaultExtensionRegistry() (extension.Registry, error) {
-	db, err := pgsql.OpenDB(*pgSQLURIFlag)
+func NewPostgresExtensionRegistry() (extension.Registry, error) {
+	db, err := pgsql.OpenDB(*postgresURIFlag)
 	if err != nil {
 		return nil, err
 	}
