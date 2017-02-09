@@ -170,7 +170,11 @@ func (m *pgSQLLogStorage) beginInternal(ctx context.Context, treeID int64) (stor
 	if err := m.db.QueryRow(getTreePropertiesSQL, treeID).Scan(&allowDuplicates); err != nil {
 		return nil, fmt.Errorf("failed to get tree row for treeID %v: %s", treeID, err)
 	}
-	th := merkle.NewRFC6962TreeHasher()
+
+	th, err := merkle.Factory(merkle.RFC6962SHA256Type)
+	if err != nil {
+		return nil, err
+	}
 
 	ttx, err := m.beginTreeTx(ctx, treeID, th.Size(), defaultLogStrata, cache.PopulateLogSubtreeNodes(th), cache.PrepareLogSubtreeWrite())
 	if err != nil {
@@ -183,12 +187,12 @@ func (m *pgSQLLogStorage) beginInternal(ctx context.Context, treeID int64) (stor
 		allowDuplicates: allowDuplicates,
 	}
 
-	root, err := ltx.LatestSignedLogRoot()
+	ltx.root, err = ltx.fetchLatestRoot()
 	if err != nil {
 		ttx.Rollback()
 		return nil, err
 	}
-	ltx.treeTX.writeRevision = root.TreeRevision + 1
+	ltx.treeTX.writeRevision = ltx.root.TreeRevision + 1
 
 	return ltx, nil
 }
@@ -208,7 +212,12 @@ func (m *pgSQLLogStorage) SnapshotForTree(ctx context.Context, treeID int64) (st
 type logTreeTX struct {
 	treeTX
 	ls              *pgSQLLogStorage
+	root            trillian.SignedLogRoot
 	allowDuplicates bool
+}
+
+func (t *logTreeTX) ReadRevision() int64 {
+	return t.root.TreeRevision
 }
 
 func (t *logTreeTX) WriteRevision() int64 {
@@ -410,6 +419,11 @@ func (t *logTreeTX) GetLeavesByHash(leafHashes [][]byte, orderBySequence bool) (
 }
 
 func (t *logTreeTX) LatestSignedLogRoot() (trillian.SignedLogRoot, error) {
+	return t.root, nil
+}
+
+// fetchLatestRoot reads the latest SignedLogRoot from the DB and returns it.
+func (t *logTreeTX) fetchLatestRoot() (trillian.SignedLogRoot, error) {
 	var timestamp, treeSize, treeRevision int64
 	var rootHash, rootSignatureBytes []byte
 	var rootSignature trillian.DigitallySigned

@@ -222,9 +222,7 @@ func TestMapSetSameKeyInSameRevisionFails(t *testing.T) {
 		if err := tx.Set(keyHash, mapLeaf); err == nil {
 			t.Fatalf("Unexpectedly succeeded in setting %v to %v", keyHash, mapLeaf)
 		}
-		if err := tx.Commit(); err != nil {
-			t.Fatalf("Failed to commit: %v", err)
-		}
+		tx.Rollback()
 	}
 }
 
