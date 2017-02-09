@@ -23,7 +23,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang/glog"
 	"github.com/google/trillian"
 	"github.com/google/trillian/crypto"

@@ -24,31 +24,27 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/google/trillian"
+	"github.com/google/trillian/extension/builtin"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/storage"
-	"github.com/google/trillian/storage/mysql"
 	"github.com/google/trillian/testonly"
-
-	_ "github.com/go-sql-driver/mysql"
 )
-
-var mySQLURIFlag = flag.String("mysql_uri", "test:zaphod@tcp(127.0.0.1:3306)/test", "")
 
 func main() {
 	flag.Parse()
 	glog.Info("Starting...")
 
-	db, err := mysql.OpenDB(*mySQLURIFlag)
+	registry, err := builtin.NewDefaultExtensionRegistry()
 	if err != nil {
-		glog.Fatalf("Failed to open DB connection: %v", err)
+		glog.Fatalf("Failed create extension registry: %v", err)
 	}
 
-	mapID := int64(1)
-	ms, err := mysql.NewMapStorage(db)
+	ms, err := registry.GetMapStorage()
 	if err != nil {
 		glog.Fatalf("Failed create MapStorage: %v", err)
 	}
 
+	mapID := int64(1)
 	h, err := merkle.Factory(merkle.RFC6962SHA256Type)
 	if err != nil {
 		glog.Fatalf("Could not find hasher: %v", err)
@@ -138,5 +134,4 @@ func main() {
 		glog.Fatalf("Expected root %s, got root: %s", base64.StdEncoding.EncodeToString(expected), base64.StdEncoding.EncodeToString(got))
 	}
 	glog.Infof("Finished, root: %s", base64.StdEncoding.EncodeToString(root))
-
 }
