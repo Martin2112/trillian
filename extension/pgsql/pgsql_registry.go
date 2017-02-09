@@ -26,7 +26,7 @@ import (
 )
 
 // pgSQLURIFlag is the postgres db connection string.
-var pgSQLURIFlag = flag.String("pgsql_uri", "test:zaphod@tcp(127.0.0.1:3306)/test",
+var pgSQLURIFlag = flag.String("pgsql_uri", "postgres://test:zaphod@localhost/test",
 	"uri to use with postgres storage")
 
 // pgsql implementation of extension.Registry.
