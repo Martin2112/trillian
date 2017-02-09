@@ -4,17 +4,14 @@
 -- Tree stuff here
 -- ---------------------------------------------
 
-CREATE TYPE TreeTypeEnum AS ENUM('LOG', 'MAP');
-CREATE TYPE HasherTypeEnum AS ENUM('SHA256');
-
 -- Tree parameters should not be changed after creation. Doing so can
 -- render the data in the tree unusable or inconsistent.
 CREATE TABLE IF NOT EXISTS Trees(
   TreeId                INTEGER NOT NULL,
   KeyId                 BYTEA CHECK (KeyId IS NOT NULL AND length(KeyId) <= 255),
-  TreeType              TreeTypeEnum  NOT NULL,
-  LeafHasherType        HasherTypeEnum NOT NULL,
-  TreeHasherType        HasherTypeEnum NOT NULL,
+  TreeType              VARCHAR CHECK (TreeType = 'LOG' OR TreeType = 'MAP')  NOT NULL,
+  LeafHasherType        VARCHAR CHECK (LeafHasherType = 'SHA256') NOT NULL,
+  TreeHasherType        VARCHAR CHECK (TreeHasherType = 'SHA256') NOT NULL,
   AllowsDuplicateLeaves BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY(TreeId)
 );
@@ -152,9 +149,9 @@ CREATE TABLE IF NOT EXISTS MapHead(
 CREATE OR REPLACE FUNCTION upsert_trees(tid INTEGER, kid BYTEA, tt VARCHAR) RETURNS VOID AS $$
 DECLARE
 BEGIN
-    UPDATE Trees SET KeyID = kid, TreeType = tt::TreeTypeEnum WHERE TreeID = tid;
+    UPDATE Trees SET KeyID = kid, TreeType = tt WHERE TreeID = tid;
     IF NOT FOUND THEN
-        INSERT INTO Trees VALUES(tid, kid, tt::TreeTypeEnum, 'SHA256', 'SHA256');
+        INSERT INTO Trees VALUES(tid, kid, tt, 'SHA256', 'SHA256');
     END IF;
 END;
 $$ LANGUAGE 'plpgsql';
