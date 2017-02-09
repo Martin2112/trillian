@@ -223,7 +223,11 @@ func createSomeNodes(testName string, treeID int64) []storage.Node {
 }
 
 func createLogNodesForTreeAtSize(ts, rev int64) []storage.Node {
-	tree := merkle.NewCompactMerkleTree(merkle.NewRFC6962TreeHasher())
+	th, err := merkle.Factory(merkle.RFC6962SHA256Type)
+	if err != nil {
+		return nil
+	}
+	tree := merkle.NewCompactMerkleTree(th)
 	nodeMap := make(map[string]storage.Node)
 	for l := 0; l < int(ts); l++ {
 		// We're only interested in the side effects of adding leaves - the node updates

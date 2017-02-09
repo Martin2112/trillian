@@ -64,7 +64,10 @@ func NewMapStorage(db *sql.DB) (storage.MapStorage, error) {
 
 func (m *pgSQLMapStorage) BeginForTree(ctx context.Context, treeID int64) (storage.MapTreeTX, error) {
 	// TODO(codingllama): Validate treeType, read hash algorithm from storage
-	th := merkle.NewRFC6962TreeHasher()
+	th, err := merkle.Factory(merkle.RFC6962SHA256Type)
+	if err != nil {
+		return nil, err
+	}
 
 	ttx, err := m.beginTreeTx(ctx, treeID, th.Size(), defaultMapStrata, cache.PopulateMapSubtreeNodes(th), cache.PrepareMapSubtreeWrite())
 	if err != nil {
@@ -76,11 +79,11 @@ func (m *pgSQLMapStorage) BeginForTree(ctx context.Context, treeID int64) (stora
 		ms:     m,
 	}
 
-	root, err := mtx.LatestSignedMapRoot()
+	mtx.root, err = mtx.LatestSignedMapRoot()
 	if err != nil {
 		return nil, err
 	}
-	mtx.treeTX.writeRevision = root.MapRevision + 1
+	mtx.treeTX.writeRevision = mtx.root.MapRevision + 1
 
 	return mtx, nil
 }
@@ -95,7 +98,12 @@ func (m *pgSQLMapStorage) SnapshotForTree(ctx context.Context, treeID int64) (st
 
 type mapTreeTX struct {
 	treeTX
-	ms *pgSQLMapStorage
+	ms   *pgSQLMapStorage
+	root trillian.SignedMapRoot
+}
+
+func (m *mapTreeTX) ReadRevision() int64 {
+	return m.root.MapRevision
 }
 
 func (m *mapTreeTX) WriteRevision() int64 {

@@ -253,7 +253,7 @@ func TestQueueDuplicateLeafFails(t *testing.T) {
 	prepareTestLogDB(DB, logID, t)
 	s := prepareTestLogStorage(DB, logID, t)
 	tx := beginLogTx(s, logID, t)
-	defer commit(tx, t)
+	defer tx.Rollback()
 
 	leaves := createTestLeaves(5, 10)
 
@@ -735,7 +735,7 @@ func TestDuplicateSignedLogRoot(t *testing.T) {
 	prepareTestLogDB(DB, logID, t)
 	s := prepareTestLogStorage(DB, logID, t)
 	tx := beginLogTx(s, logID, t)
-	defer commit(tx, t)
+	defer tx.Rollback()
 
 	// TODO: Tidy up the log id as it looks silly chained 3 times like this
 	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &trillian.DigitallySigned{Signature: []byte("notempty")}}
