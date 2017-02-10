@@ -39,6 +39,7 @@ import (
 var (
 	serverPortFlag                = flag.Int("port", 8090, "Port to serve log RPC requests on")
 	exportRPCMetrics              = flag.Bool("export_metrics", true, "If true starts HTTP server and exports stats")
+  httpHostFlag                  = flag.String("http_host", "localhost", "Host to use when creating http server")
 	httpPortFlag                  = flag.Int("http_port", 8091, "Port to serve HTTP metrics on")
 	sequencerSleepBetweenRunsFlag = flag.Duration("sequencer_sleep_between_runs", time.Second*10, "Time to pause after each sequencing pass through all logs")
 	batchSizeFlag                 = flag.Int("batch_size", 50, "Max number of leaves to process per batch")
@@ -64,8 +65,8 @@ func startRPCServer(registry extension.Registry) (*grpc.Server, error) {
 	return grpcServer, nil
 }
 
-func startHTTPServer(port int) error {
-	sock, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+func startHTTPServer(host string, port int) error {
+	sock, err := net.Listen("tcp", fmt.Sprintf("%s:%d", port))
 	if err != nil {
 		return err
 	}
@@ -105,8 +106,8 @@ func main() {
 	// Start HTTP server (optional)
 	if *exportRPCMetrics {
 		glog.Infof("Creating HTP server starting on port: %d", *httpPortFlag)
-		if err := startHTTPServer(*httpPortFlag); err != nil {
-			glog.Exitf("Failed to start http server on port %d: %v", *httpPortFlag, err)
+		if err := startHTTPServer(*httpHostFlag, *httpPortFlag); err != nil {
+			glog.Fatalf("Failed to start http server on host, port %s,%d: %v", *httpHostFlag, *httpPortFlag, err)
 		}
 	}
 
