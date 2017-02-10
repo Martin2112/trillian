@@ -27,13 +27,13 @@ import (
 	"github.com/golang/glog"
 	"github.com/google/trillian"
 	"github.com/google/trillian/extension"
+	"github.com/google/trillian/extension/postgres"
 	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/server"
 	"github.com/google/trillian/util"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"github.com/google/trillian/extension/postgres"
 )
 
 var (

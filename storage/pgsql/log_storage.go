@@ -79,7 +79,7 @@ type pgSQLLogStorage struct {
 	*pgSQLTreeStorage
 }
 
-// NewLogStorage creates a pgSQLLogStorage instance for the specified MySQL URL.
+// NewLogStorage creates a pgSQLLogStorage instance for the specified postgres DB.
 func NewLogStorage(db *sql.DB) (storage.LogStorage, error) {
 	return &pgSQLLogStorage{
 		pgSQLTreeStorage: newTreeStorage(db),
