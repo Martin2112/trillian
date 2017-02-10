@@ -25,9 +25,9 @@ import (
 	"github.com/google/trillian/storage/pgsql"
 )
 
-// pgSQLURIFlag is the postgres db connection string.
-var postgresURIFlag = flag.String("pgsql_uri", "postgres://test:zaphod@localhost/test",
-	"uri to use with postgres storage")
+// postgresURIFlag is the postgres db connection string.
+var postgresURIFlag = flag.String("postgres_uri", "postgres://test:zaphod@localhost/test",
+	"default uri to use with postgres storage")
 
 // pgsql implementation of extension.Registry.
 type pgsqlRegistry struct {
@@ -42,8 +42,8 @@ func (r *pgsqlRegistry) GetMapStorage() (storage.MapStorage, error) {
 	return pgsql.NewMapStorage(r.db)
 }
 
-// NewDefaultExtensionRegistry returns the default extension.Registry implementation, which is
-// backed by a MySQL database and configured via flags.
+// NewPostgresExtensionRegistry returns the postgres extension.Registry implementation, which is
+// backed by a postgres database and configured via flags.
 // The returned registry is wraped in a cached registry.
 func NewPostgresExtensionRegistry() (extension.Registry, error) {
 	db, err := pgsql.OpenDB(*postgresURIFlag)
