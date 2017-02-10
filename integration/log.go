@@ -44,6 +44,7 @@ type TestParameters struct {
 	sequencingWaitTotal time.Duration
 	sequencingPollWait  time.Duration
 	rpcRequestDeadline  time.Duration
+	retryQueueLeavesErr string
 }
 
 // DefaultTestParameters builds a TestParameters object for a normal
@@ -62,6 +63,7 @@ func DefaultTestParameters(treeID int64) TestParameters {
 		sequencingWaitTotal: 10 * time.Second * 60,
 		sequencingPollWait:  time.Second * 5,
 		rpcRequestDeadline:  time.Second * 10,
+		retryQueueLeavesErr: "pq: restart transaction",
 	}
 }
 
@@ -199,16 +201,24 @@ func queueLeaves(client trillian.TrillianLogClient, params TestParameters) error
 
 		if len(leaves) >= params.queueBatchSize || (l+1) == params.leafCount {
 			glog.Infof("Queueing %d leaves ...", len(leaves))
+			retrying := true
 
-			ctx, cancel := getRPCDeadlineContext(params)
-			_, err := client.QueueLeaves(ctx, &trillian.QueueLeavesRequest{
-				LogId:  params.treeID,
-				Leaves: leaves,
-			})
-			cancel()
+			// Retry until we succeed or get an error that's not retryable
+			for retrying {
+				ctx, cancel := getRPCDeadlineContext(params)
+				_, err := client.QueueLeaves(ctx, &trillian.QueueLeavesRequest{
+					LogId:  params.treeID,
+					Leaves: leaves,
+				})
+				cancel()
 
-			if err != nil {
-				return err
+				if err != nil {
+					if !strings.Contains(err.Error(), params.retryQueueLeavesErr) {
+						return err
+					}
+				} else {
+					retrying = false
+				}
 			}
 			leaves = leaves[:0] // starting new batch
 		}

@@ -66,7 +66,7 @@ func startRPCServer(registry extension.Registry) (*grpc.Server, error) {
 }
 
 func startHTTPServer(host string, port int) error {
-	sock, err := net.Listen("tcp", fmt.Sprintf("%s:%d", port))
+	sock, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return err
 	}
