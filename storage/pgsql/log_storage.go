@@ -86,6 +86,10 @@ func NewLogStorage(db *sql.DB) (storage.LogStorage, error) {
 	}, nil
 }
 
+func (m *pgSQLLogStorage) CheckDatabaseAccessible(ctx context.Context) error {
+	return checkDatabaseAccessible(ctx, m.db)
+}
+
 func (m *pgSQLLogStorage) getLeavesByIndexStmt(num int) (*sql.Stmt, error) {
 	return m.getStmt(selectLeavesByIndexSQL, 2, num)
 }
