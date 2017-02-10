@@ -26,18 +26,19 @@ import (
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
 	"github.com/google/trillian/storage/storagepb"
+	"github.com/lib/pq"
 	"strconv"
 )
 
 // These statements are fixed
 const (
 	insertSubtreeMultiSQL = `INSERT INTO Subtree(TreeId, SubtreeId, Nodes, SubtreeRevision) ` + placeholderSQL
-	insertTreeHeadSQL = `INSERT INTO TreeHead(TreeId,TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature)
+	insertTreeHeadSQL     = `INSERT INTO TreeHead(TreeId,TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature)
 		 VALUES($1,$2,$3,$4,$5,$6)`
 	selectTreeRevisionAtSizeOrLargerSQL = "SELECT TreeRevision,TreeSize FROM TreeHead WHERE TreeId=$1 AND TreeSize>=$2 ORDER BY TreeRevision LIMIT 1"
-	selectActiveLogsSQL = "SELECT TreeId, KeyId from Trees where TreeType='LOG'"
-	selectActiveLogsWithUnsequencedSQL = "SELECT DISTINCT t.TreeId, t.KeyId from Trees t INNER JOIN Unsequenced u ON t.TreeId=u.TreeId WHERE TreeType='LOG'"
-	selectSubtreeSQL = `
+	selectActiveLogsSQL                 = "SELECT TreeId, KeyId from Trees where TreeType='LOG'"
+	selectActiveLogsWithUnsequencedSQL  = "SELECT DISTINCT t.TreeId, t.KeyId from Trees t INNER JOIN Unsequenced u ON t.TreeId=u.TreeId WHERE TreeType='LOG'"
+	selectSubtreeSQL                    = `
  SELECT x.SubtreeId, x.MaxRevision, Subtree.Nodes
  FROM (
  	SELECT n.SubtreeId, max(n.SubtreeRevision) AS MaxRevision
@@ -56,7 +57,7 @@ const (
 // pgSQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
 type pgSQLTreeStorage struct {
-	db             *sql.DB
+	db *sql.DB
 
 	// Must hold the mutex before manipulating the statement map. Sharing a lock because
 	// it only needs to be held while the statements are built, not while they execute and
@@ -66,7 +67,7 @@ type pgSQLTreeStorage struct {
 	statements     map[string]map[int]*sql.Stmt
 	// If true then the server version should support use of the ON CONFLICT clause for
 	// INSERT statements
-	useOnConflict  bool
+	useOnConflict bool
 }
 
 // OpenDB opens a database connection for all postgres-based storage implementations.
@@ -147,8 +148,8 @@ func expandPlaceholderSQL(sql string, first, num int) string {
 
 	parameters := fmt.Sprintf("$%d", first)
 	p := first + 1
-	for i := 0; i < num - 1; i++ {
-		parameters += fmt.Sprintf(",$%d", p + i)
+	for i := 0; i < num-1; i++ {
+		parameters += fmt.Sprintf(",$%d", p+i)
 	}
 
 	return strings.Replace(sql, placeholderSQL, parameters, 1)
@@ -215,9 +216,9 @@ func (m *pgSQLTreeStorage) getSubtreeStmt(num int) (*sql.Stmt, error) {
 }
 
 func (m *pgSQLTreeStorage) setSubtreeStmt(num int) (*sql.Stmt, error) {
-	sql := expandValuesPlaceholderSQL(insertSubtreeMultiSQL, 4, num)
+	tmpl := expandValuesPlaceholderSQL(insertSubtreeMultiSQL, 4, num)
 	// Should not be any more placeholder expansion but we're not allowed to pass zero
-	return m.getStmt(sql, 1, 1)
+	return m.getStmt(tmpl, 1, 1)
 }
 
 func (m *pgSQLTreeStorage) beginTreeTx(ctx context.Context, treeID int64, hashSizeBytes int, strataDepths []int, populate storage.PopulateSubtreeFunc, prepare storage.PrepareSubtreeWriteFunc) (treeTX, error) {
@@ -274,7 +275,7 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 	stx := t.tx.Stmt(tmpl)
 	defer stx.Close()
 
-	args := make([]interface{}, 0, len(nodeIDs) + 3)
+	args := make([]interface{}, 0, len(nodeIDs)+3)
 
 	// Append fixed params first
 	args = append(args, interface{}(t.treeID))
@@ -283,11 +284,11 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 
 	// populate args with nodeIDs
 	for _, nodeID := range nodeIDs {
-		if nodeID.PrefixLenBits % 8 != 0 {
+		if nodeID.PrefixLenBits%8 != 0 {
 			return nil, fmt.Errorf("invalid subtree ID - not multiple of 8: %d", nodeID.PrefixLenBits)
 		}
 
-		nodeIDBytes := nodeID.Path[:nodeID.PrefixLenBits / 8]
+		nodeIDBytes := nodeID.Path[:nodeID.PrefixLenBits/8]
 
 		args = append(args, interface{}(nodeIDBytes))
 	}
@@ -447,6 +448,15 @@ func (t *treeTX) Commit() error {
 	}
 	t.closed = true
 	if err := t.tx.Commit(); err != nil {
+		pqErr, ok := err.(*pq.Error)
+		// If this is a retryable error from CockroachDB ensure we rollback everything.
+		// The caller will have to manage retrying.
+		if retryable := ok && pqErr.Code == "40001"; retryable {
+			if err := t.tx.Rollback(); err != nil {
+				glog.Warningf("TX commit failure rollback: %v", err)
+			}
+		}
+
 		glog.Warningf("TX commit error: %s", err)
 		return err
 	}
