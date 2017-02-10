@@ -62,6 +62,30 @@ func NewMapStorage(db *sql.DB) (storage.MapStorage, error) {
 	}, nil
 }
 
+func (m *pgSQLMapStorage) CheckDatabaseAccessible(ctx context.Context) error {
+	return checkDatabaseAccessible(ctx, m.db)
+}
+
+type readOnlyMapTX struct {
+	tx *sql.Tx
+}
+
+func (m *pgSQLMapStorage) Snapshot(ctx context.Context) (storage.ReadOnlyMapTX, error) {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return &readOnlyMapTX{tx}, nil
+}
+
+func (t *readOnlyMapTX) Commit() error {
+	return t.tx.Commit()
+}
+
+func (t *readOnlyMapTX) Rollback() error {
+	return t.tx.Rollback()
+}
+
 func (m *pgSQLMapStorage) BeginForTree(ctx context.Context, treeID int64) (storage.MapTreeTX, error) {
 	// TODO(codingllama): Validate treeType, read hash algorithm from storage
 	th, err := merkle.Factory(merkle.RFC6962SHA256Type)
