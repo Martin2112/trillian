@@ -239,7 +239,7 @@ func (m *pgSQLTreeStorage) beginTreeTx(ctx context.Context, treeID int64, hashSi
 
 	// If enabled request SNAPSHOT isolation
 	if cockroachSnapshotIsolation {
-		if _, err := t.Exec("BEGIN ISOLATION LEVEL SNAPSHOT"); err != nil {
+		if _, err := t.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
 			return treeTX{}, err
 		}
 	}
