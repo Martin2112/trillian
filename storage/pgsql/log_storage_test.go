@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian"
 	"github.com/google/trillian/storage"
+	_ "github.com/lib/pq"
 	"reflect"
 )
 
@@ -147,7 +147,7 @@ func TestBegin(t *testing.T) {
 			t.Errorf("LatestSignedLogRoot() = (_, %v), want = (_, nil)", err)
 		}
 
-		if got, want := tx.WriteRevision(), root.TreeRevision + 1; got != want {
+		if got, want := tx.WriteRevision(), root.TreeRevision+1; got != want {
 			t.Errorf("WriteRevision() = %v, want = %v", got, want)
 		}
 
@@ -562,7 +562,7 @@ func TestDequeueLeavesTimeOrdering(t *testing.T) {
 		ensureAllLeavesDistinct(dequeue1, t)
 
 		// Ensure this is the second batch queued by comparing leaf data.
-		if !leafInRange(dequeue1[0], batchSize, batchSize + batchSize - 1) || !leafInRange(dequeue1[1], batchSize, batchSize + batchSize - 1) {
+		if !leafInRange(dequeue1[0], batchSize, batchSize+batchSize-1) || !leafInRange(dequeue1[1], batchSize, batchSize+batchSize-1) {
 			t.Fatalf("Got leaf from wrong batch (1st dequeue): (%s %s)", string(dequeue1[0].LeafValue), string(dequeue1[1].LeafValue))
 		}
 
@@ -584,7 +584,7 @@ func TestDequeueLeavesTimeOrdering(t *testing.T) {
 		ensureAllLeavesDistinct(dequeue2, t)
 
 		// Ensure this is the first batch by comparing leaf data.
-		if !leafInRange(dequeue2[0], 0, batchSize - 1) || !leafInRange(dequeue2[1], 0, batchSize - 1) {
+		if !leafInRange(dequeue2[0], 0, batchSize-1) || !leafInRange(dequeue2[1], 0, batchSize-1) {
 			t.Fatalf("Got leaf from wrong batch (2nd dequeue): (%s %s)", string(dequeue2[0].LeafValue), string(dequeue2[1].LeafValue))
 		}
 
@@ -1017,7 +1017,7 @@ func TestGetSequencedLeafCount(t *testing.T) {
 		data2 := []byte("some data 2")
 		data3 := []byte("some data 3")
 		createFakeLeaf(DB, logID2.logID, dummyHash2, dummyRawHash, data2, someExtraData, sequenceNumber, t)
-		createFakeLeaf(DB, logID2.logID, dummyHash3, dummyRawHash, data3, someExtraData, sequenceNumber + 1, t)
+		createFakeLeaf(DB, logID2.logID, dummyHash3, dummyRawHash, data3, someExtraData, sequenceNumber+1, t)
 	}
 
 	// Read back the leaf counts from both trees
@@ -1064,7 +1064,7 @@ func ensureAllLeavesDistinct(leaves []trillian.LogLeaf, t *testing.T) {
 func createTestLeaves(n, startSeq int64) []trillian.LogLeaf {
 	var leaves []trillian.LogLeaf
 	for l := int64(0); l < n; l++ {
-		lv := fmt.Sprintf("Leaf %d", l + startSeq)
+		lv := fmt.Sprintf("Leaf %d", l+startSeq)
 		h := sha256.New()
 		h.Write([]byte(lv))
 		leafHash := h.Sum(nil)

@@ -22,19 +22,19 @@ const (
 	setTreePropertiesSQL = `INSERT INTO Trees(TreeId,KeyId,TreeType,LeafHasherType,TreeHasherType,AllowsDuplicateLeaves) VALUES($1, $2, $3, $4, $5, $6)`
 	setTreeParametersSQL = `INSERT INTO TreeControl(TreeId,ReadOnlyRequests,SigningEnabled,SequencingEnabled,SequenceIntervalSeconds,SignIntervalSeconds) 
 		VALUES($1, $2, $3, $4, $5, $6)`
-	deleteTreeSQL = `DELETE FROM Trees WHERE TreeId = $1`
+	deleteTreeSQL        = `DELETE FROM Trees WHERE TreeId = $1`
 	deleteTreeControlSQL = `DELETE FROM TreeControl WHERE TreeId = $1`
 
-	keyID = 1
-	treeType = "LOG"
-	leafHasherType = "SHA256"
-	treeHasherType = "SHA256"
+	keyID                = 1
+	treeType             = "LOG"
+	leafHasherType       = "SHA256"
+	treeHasherType       = "SHA256"
 	allowDuplicateLeaves = false
-	readOnly = false
-	signingEnabled = false
-	sequencingEnabled = false
-	sequenceInterval = 1
-	signInterval = 1
+	readOnly             = false
+	signingEnabled       = false
+	sequencingEnabled    = false
+	sequenceInterval     = 1
+	signInterval         = 1
 )
 
 // CreateTree instantiates a new log with default parameters.
