@@ -96,14 +96,9 @@ CREATE TABLE IF NOT EXISTS SequencedLeafData(
   -- This is a MerkleLeafHash as defined by the treehasher that the log uses. For example for
   -- CT this hash will include the leaf prefix byte as well as the leaf data.
   MerkleLeafHash       BYTEA CHECK (MerkleLeafHash IS NOT NULL And length(MerkleLeafHash) <= 255),
-  // Can only interleave if the primary key includes that of parent table as prefix. See index
-  // below
-  PRIMARY KEY(TreeId, LeafIdentityHash, SequenceNumber),
+  PRIMARY KEY(TreeId, SequenceNumber),
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId),
-) INTERLEAVE IN PARENT LeafData(TreeId, LeafIdentityHash);
-
-// Ensure that sequence numbers are unique within each tree
-CREATE UNIQUE INDEX EnforceSeqIndex ON SequencedLeafData(TreeID, SequenceNumber);
+);
 
 CREATE TABLE IF NOT EXISTS Unsequenced(
   TreeId               INTEGER NOT NULL,
