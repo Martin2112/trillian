@@ -26,6 +26,9 @@ import (
 	"strings"
 )
 
+// If true we'll attempt to retry when we see this type of error from the server
+const cockroachDBRetry = true
+
 // SequencerManager provides sequencing operations for a collection of Logs.
 type SequencerManager struct {
 	guardWindow time.Duration
@@ -100,12 +103,15 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 		retrying := true
 		leaves := 0
 
+		// Attempt to handle cases for CockroachDB where the transaction must be retried
 		for retrying {
 			leaves, err = sequencer.SequenceBatch(ctx, logID, logctx.batchSize)
 			if err != nil {
-				if strings.Contains(err.Error(), "pq: restart transaction") {
+				if cockroachDBRetry && strings.Contains(err.Error(), "pq: restart transaction") {
+					// Go around again for another attempt at sequencing
 					glog.Warningf("%v: Retrying sequence batch for: %v", logID, err)
 				} else {
+					// Any other error type, stop trying to sequence, wait for next run
 					glog.Warningf("%v: Error trying to sequence batch for: %v", logID, err)
 					retrying = false
 				}

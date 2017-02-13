@@ -54,6 +54,9 @@ const (
 	placeholderSQL = "<placeholder>"
 )
 
+// If true we'll attempt to roll back / retry when we see this type of error from the server
+const cockroachDBRetry = true
+
 // pgSQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
 type pgSQLTreeStorage struct {
@@ -448,16 +451,17 @@ func (t *treeTX) Commit() error {
 	}
 	t.closed = true
 	if err := t.tx.Commit(); err != nil {
+		glog.Warningf("TX commit error: %s", err)
+
 		pqErr, ok := err.(*pq.Error)
 		// If this is a retryable error from CockroachDB ensure we rollback everything.
 		// The caller will have to manage retrying.
-		if retryable := ok && pqErr.Code == "40001"; retryable {
+		if retryable := ok && pqErr.Code == "40001" && cockroachDBRetry; retryable {
 			if err := t.tx.Rollback(); err != nil {
 				glog.Warningf("TX commit failure rollback: %v", err)
 			}
 		}
 
-		glog.Warningf("TX commit error: %s", err)
 		return err
 	}
 	return nil
