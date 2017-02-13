@@ -56,6 +56,8 @@ const (
 
 // If true we'll attempt to roll back / retry when we see this type of error from the server
 const cockroachDBRetry = true
+// If true we'll enable client side retry custom logic for CockroachDB.
+const cockroachClientRetry = true
 
 // pgSQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
@@ -231,6 +233,14 @@ func (m *pgSQLTreeStorage) beginTreeTx(ctx context.Context, treeID int64, hashSi
 		glog.Warningf("Could not start tree TX: %s", err)
 		return treeTX{}, err
 	}
+
+	// If configured, enable the client side retry option for CockroachDB
+	if cockroachClientRetry {
+		if _, err := t.Exec("SAVEPOINT cockroach_restart"); err != nil {
+			return treeTX{}, err
+		}
+	}
+
 	return treeTX{
 		tx:            t,
 		ts:            m,
@@ -439,6 +449,46 @@ func (t *treeTX) SetMerkleNodes(nodes []storage.Node) error {
 	return nil
 }
 
+// Portions of this logic adapted from the tx.go file in the CockroachDB repo. Apache 2.0
+// licensed.
+func (t *treeTX) cockroachCommit() error {
+	var err error
+
+	// Whatever happens we must commit or rollback the tx.
+	defer func() {
+		if err == nil {
+			// Ignore commit errors. The tx has already been committed by RELEASE.
+			_ = t.tx.Commit()
+		} else {
+			// We always need to execute a Rollback() so sql.DB releases the connection.
+			_ = t.tx.Rollback()
+		}
+	}()
+
+	if err == nil {
+		// RELEASE acts like COMMIT in CockroachDB. We use it since it gives us an
+		// opportunity to react to retryable errors, whereas tx.Commit() doesn't.
+		if _, err = t.tx.Exec("RELEASE SAVEPOINT cockroach_restart"); err == nil {
+			return nil
+		}
+	}
+	// We got an error; let's see if it's a retryable one and, if so, restart. We look
+	// for the PG errcode SerializationFailureError:40001.
+	pqErr, ok := err.(*pq.Error)
+	if retryable := ok && pqErr.Code == "40001"; !retryable {
+		// The TX is in an ambiguous state. "Maybe committed" is not a good result for a
+		// database to return. We'll rollback and retry the same writes later.
+		return err
+	}
+	// Try to roll things back to the savepoint. If it succeeds we still return the original
+	// error because we want the caller to see it and retry
+	if _, err2 := t.tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); err2 != nil {
+		return err2
+	}
+
+	return err
+}
+
 func (t *treeTX) Commit() error {
 	if t.writeRevision > -1 {
 		err := t.subtreeCache.Flush(func(st []*storagepb.SubtreeProto) error {
@@ -450,6 +500,12 @@ func (t *treeTX) Commit() error {
 		}
 	}
 	t.closed = true
+
+	// If configured, handle CockroachDB specific errors via client retry feature
+	if cockroachClientRetry {
+		return t.cockroachCommit()
+	}
+
 	if err := t.tx.Commit(); err != nil {
 		glog.Warningf("TX commit error: %s", err)
 
