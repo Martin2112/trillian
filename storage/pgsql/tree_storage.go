@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"flag"
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian/storage"
@@ -54,13 +55,11 @@ const (
 	placeholderSQL = "<placeholder>"
 )
 
-// If true we'll attempt to roll back / retry when we see this type of error from the server
-const cockroachDBRetry = true
-// If true we'll enable client side retry custom logic for CockroachDB.
-const cockroachClientRetry = true
-// If true we'll request SNAPSHOT isolation level on all transactions
-// https://www.cockroachlabs.com/docs/transactions.html#snapshot-isolation
-const cockroachSnapshotIsolation = true
+// TODO(Martin2112): Shouldn't have flags in low level code. Remove them when we've finished
+// experimenting with storage options
+var cockroachRetryFlag = flag.Bool("cockroach_retry", false, "If true we'll attempt to roll back / retry when we see this type of error from the server")
+var cockroachClientRetryFlag = flag.Bool("cockroach_client_retry", false, "If true we'll enable client side retry custom logic for CockroachDB")
+var cockroachSnapshotIsoFlag = flag.Bool("cockroach_snapshot_isolation", false, "If true we'll request SNAPSHOT isolation level on all transactions")
 
 // pgSQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
@@ -238,14 +237,14 @@ func (m *pgSQLTreeStorage) beginTreeTx(ctx context.Context, treeID int64, hashSi
 	}
 
 	// If enabled request SNAPSHOT isolation
-	if cockroachSnapshotIsolation {
+	if *cockroachSnapshotIsoFlag {
 		if _, err := t.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
 			return treeTX{}, err
 		}
 	}
 
 	// If configured, enable the client side retry option for CockroachDB
-	if cockroachClientRetry {
+	if *cockroachClientRetryFlag {
 		if _, err := t.Exec("SAVEPOINT cockroach_restart"); err != nil {
 			return treeTX{}, err
 		}
@@ -512,7 +511,7 @@ func (t *treeTX) Commit() error {
 	t.closed = true
 
 	// If configured, handle CockroachDB specific errors via client retry feature
-	if cockroachClientRetry {
+	if *cockroachClientRetryFlag {
 		return t.cockroachCommit()
 	}
 
@@ -522,7 +521,7 @@ func (t *treeTX) Commit() error {
 		pqErr, ok := err.(*pq.Error)
 		// If this is a retryable error from CockroachDB ensure we rollback everything.
 		// The caller will have to manage retrying.
-		if retryable := ok && pqErr.Code == "40001" && cockroachDBRetry; retryable {
+		if retryable := ok && pqErr.Code == "40001" && *cockroachRetryFlag; retryable {
 			if err := t.tx.Rollback(); err != nil {
 				glog.Warningf("TX commit failure rollback: %v", err)
 			}
