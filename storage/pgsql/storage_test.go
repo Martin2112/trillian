@@ -144,7 +144,7 @@ func TestLogNodeRoundTripMultiSubtree(t *testing.T) {
 		}
 
 		// Need to read nodes before attempting to write
-		if _, err := tx.GetMerkleNodes(writeRevision - 1, nodeIDsToRead); err != nil {
+		if _, err := tx.GetMerkleNodes(writeRevision-1, nodeIDsToRead); err != nil {
 			t.Fatalf("Failed to read nodes: %s", err)
 		}
 

@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	getTreePropertiesSQL = "SELECT AllowsDuplicateLeaves FROM Trees WHERE TreeId=$1"
-	getTreeParametersSQL = "SELECT ReadOnlyRequests From TreeControl WHERE TreeID=$1"
+	getTreePropertiesSQL  = "SELECT AllowsDuplicateLeaves FROM Trees WHERE TreeId=$1"
+	getTreeParametersSQL  = "SELECT ReadOnlyRequests From TreeControl WHERE TreeID=$1"
 	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash,Payload
 			FROM Unsequenced
 			WHERE TreeID=$1
@@ -52,13 +52,13 @@ const (
 			VALUES($1,$2,$3,$4,$5,$6)`
 	insertSequencedLeafSQL = `INSERT INTO SequencedLeafData(TreeId,LeafIdentityHash,MerkleLeafHash,SequenceNumber)
 			VALUES($1,$2,$3,$4)`
-	selectSequencedLeafCountSQL = "SELECT COUNT(*) FROM SequencedLeafData WHERE TreeId=$1"
+	selectSequencedLeafCountSQL  = "SELECT COUNT(*) FROM SequencedLeafData WHERE TreeId=$1"
 	selectLatestSignedLogRootSQL = `SELECT TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature
 			FROM TreeHead WHERE TreeId=$1
 			ORDER BY TreeHeadTimestamp DESC LIMIT 1`
 
 	// These statements need to be expanded to provide the correct number of parameter placeholders.
-	deleteUnsequencedSQL = "DELETE FROM Unsequenced WHERE LeafIdentityHash IN (<placeholder>) AND TreeId = $1"
+	deleteUnsequencedSQL   = "DELETE FROM Unsequenced WHERE LeafIdentityHash IN (<placeholder>) AND TreeId = $1"
 	selectLeavesByIndexSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData
 			FROM LeafData l,SequencedLeafData s
 			WHERE l.LeafIdentityHash = s.LeafIdentityHash
@@ -69,7 +69,7 @@ const (
 			AND s.MerkleLeafHash IN (` + placeholderSQL + `) AND l.TreeId = $1 AND s.TreeId = l.TreeId`
 
 	// Same as above except with leaves ordered by sequence so we only incur this cost when necessary
-	orderBySequenceNumberSQL = " ORDER BY s.SequenceNumber"
+	orderBySequenceNumberSQL                     = " ORDER BY s.SequenceNumber"
 	selectLeavesByMerkleHashOrderedBySequenceSQL = selectLeavesByMerkleHashSQL + orderBySequenceNumberSQL
 )
 

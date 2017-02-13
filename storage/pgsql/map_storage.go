@@ -164,7 +164,7 @@ func (m *mapTreeTX) Get(revision int64, indexes [][]byte) ([]trillian.MapLeaf, e
 	stx := m.tx.Stmt(stmt)
 	defer stx.Close()
 
-	args := make([]interface{}, 0, len(indexes) + 2)
+	args := make([]interface{}, 0, len(indexes)+2)
 	// Fixed parameters first
 	args = append(args, m.treeID)
 	args = append(args, revision)

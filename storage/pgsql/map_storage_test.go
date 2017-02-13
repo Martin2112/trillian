@@ -53,7 +53,7 @@ func TestMapBegin(t *testing.T) {
 			t.Errorf("LatestSignedMapRoot() = (_, %v), want = (_, nil)", err)
 		}
 
-		if got, want := tx.WriteRevision(), root.MapRevision + 1; got != want {
+		if got, want := tx.WriteRevision(), root.MapRevision+1; got != want {
 			t.Errorf("WriteRevision() = %v, want = %v", got, want)
 		}
 
