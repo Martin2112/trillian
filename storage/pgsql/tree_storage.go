@@ -58,6 +58,9 @@ const (
 const cockroachDBRetry = true
 // If true we'll enable client side retry custom logic for CockroachDB.
 const cockroachClientRetry = true
+// If true we'll request SNAPSHOT isolation level on all transactions
+// https://www.cockroachlabs.com/docs/transactions.html#snapshot-isolation
+const cockroachSnapshotIsolation = true
 
 // pgSQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
@@ -232,6 +235,13 @@ func (m *pgSQLTreeStorage) beginTreeTx(ctx context.Context, treeID int64, hashSi
 	if err != nil {
 		glog.Warningf("Could not start tree TX: %s", err)
 		return treeTX{}, err
+	}
+
+	// If enabled request SNAPSHOT isolation
+	if cockroachSnapshotIsolation {
+		if _, err := t.Exec("BEGIN ISOLATION LEVEL SNAPSHOT"); err != nil {
+			return treeTX{}, err
+		}
 	}
 
 	// If configured, enable the client side retry option for CockroachDB
