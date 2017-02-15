@@ -77,7 +77,7 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 		// See if it's time to quit
 		select {
 		case <-logctx.ctx.Done():
-			return true
+			return
 		default:
 		}
 
