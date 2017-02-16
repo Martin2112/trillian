@@ -69,9 +69,9 @@ CREATE TABLE IF NOT EXISTS TreeHead(
 -- optimize physical storage layout. Most engines allow multiple nulls in a
 -- unique index but some may not.
 
--- A leaf that has not been sequenced has a row in this table. If duplicate leaves
--- are allowed they will all reference this row.
-CREATE TABLE IF NOT EXISTS LeafData(
+-- There is one row in the table for each distinct leaf hash. Duplicate leaves (if
+-- allowed) will share this row.
+CREATE TABLE IF NOT EXISTS LeafBody(
   TreeId               BIGINT NOT NULL,
   -- This is a personality specific has of some subset of the leaf data.
   -- It's only purpose is to allow Trillian to identify duplicate entries in
@@ -84,7 +84,19 @@ CREATE TABLE IF NOT EXISTS LeafData(
   -- This data is not included in signing and hashing.
   ExtraData            BLOB,
   PRIMARY KEY(TreeId, LeafIdentityHash),
+);
+
+-- A leaf that has not been sequenced has a row in this table. If duplicate leaves
+-- are allowed they will all reference this row.
+CREATE TABLE IF NOT EXISTS LeafData(
+  TreeId               BIGINT NOT NULL,
+  -- This is a personality specific has of some subset of the leaf data.
+  -- It's only purpose is to allow Trillian to identify duplicate entries in
+  -- the context of the personality.
+  LeafIdentityHash     VARBINARY(255) NOT NULL,
+  PRIMARY KEY(TreeId, LeafIdentityHash),
   INDEX LeafHashIdx(LeafIdentityHash),
+  FOREIGN KEY(TreeID, LeafIdentityHash) REFERENCES LeafBody(TreeId, LeafIdentityHash) ON DELETE CASCADE,
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE
 );
 
