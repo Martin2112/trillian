@@ -123,7 +123,8 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
   -- we can try to stomp dupe submissions.
   MessageId            BINARY(32) NOT NULL,
   QueueTimestampNanos  BIGINT NOT NULL,
-  PRIMARY KEY (TreeId, LeafIdentityHash, MessageId)
+  PRIMARY KEY (TreeId, LeafIdentityHash, MessageId),
+  INDEX QueueTimeIdx(QueueTimestampNanos)
 );
 
 
