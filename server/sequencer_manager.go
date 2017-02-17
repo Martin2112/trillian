@@ -15,6 +15,10 @@
 package server
 
 import (
+	"flag"
+	"os"
+	"encoding/csv"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,9 +28,6 @@ import (
 	"github.com/google/trillian/log"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/util"
-	"flag"
-	"os"
-	"encoding/csv"
 )
 
 // TODO(Martin2112): Temporary feature for testing database performance. We don't export
@@ -126,7 +127,13 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 
 				if leaves > 0 {
 					w := csv.NewWriter(s.csvFile)
-					w.Write([]string{string(logID), string(start), string(leaves), string(d), string(qps)})
+					w.Write([]string{
+						strconv.FormatInt(logID, 10),
+						strconv.FormatInt(int64(start.UnixNano()), 10),
+						strconv.FormatInt(int64(leaves), 10),
+						strconv.FormatFloat(d, 'g', -1, 64),
+						strconv.FormatFloat(qps, 'g', -1, 64),
+					})
 					w.Flush()
 				}
 
