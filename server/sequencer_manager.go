@@ -24,22 +24,36 @@ import (
 	"github.com/google/trillian/log"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/util"
+	"flag"
+	"os"
+	"encoding/csv"
 )
+
+// TODO(Martin2112): Temporary feature for testing database performance. We don't export
+// proper metrics yet.
+var statsCSVFlag = flag.String("sequencer_stats_file", "/tmp/seq-stats.csv", "The filename where stats are to be written")
 
 // SequencerManager provides sequencing operations for a collection of Logs.
 type SequencerManager struct {
 	keyManager  crypto.KeyManager
 	guardWindow time.Duration
 	registry    extension.Registry
+	csvFile     *os.File
 }
 
 // NewSequencerManager creates a new SequencerManager instance based on the provided KeyManager instance
 // and guard window.
 func NewSequencerManager(km crypto.KeyManager, registry extension.Registry, gw time.Duration) *SequencerManager {
+	csvFile, err := os.OpenFile(*statsCSVFlag, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0644)
+	if err != nil {
+		panic(err);
+	}
+
 	return &SequencerManager{
 		keyManager:  km,
 		guardWindow: gw,
 		registry:    registry,
+		csvFile:     csvFile,
 	}
 }
 
@@ -107,7 +121,14 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 					continue
 				}
 				d := time.Now().Sub(start).Seconds()
-				glog.Infof("%v: sequenced %d leaves in %.2f seconds (%.2f qps)", logID, leaves, d, float64(leaves)/d)
+				qps := float64(leaves) / d
+				glog.Infof("%v: sequenced %d leaves in %.2f seconds (%.2f qps)", logID, leaves, d, qps)
+
+				if leaves > 0 {
+					w := csv.NewWriter(s.csvFile)
+					w.Write([]string{string(logID), string(start), string(leaves), string(d), string(qps)})
+					w.Flush()
+				}
 
 				mu.Lock()
 				successCount++
