@@ -17,10 +17,7 @@ SELECT create_distributed_table('treehead', 'treeid', colocate_with => 'trees');
 -- Log Specific
 SELECT create_distributed_table('leafdata', 'treeid', colocate_with => 'trees');
 SELECT create_distributed_table('sequencedleafdata', 'treeid', colocate_with => 'trees');
-
--- This doesn't need to be colocated and can use a different distribution column. However
--- it might make sense to do so - this will be investigated at some point
-SELECT create_distributed_table('unsequenced', 'leafidentityhash');
+SELECT create_distributed_table('unsequenced', 'treeid', colocate_with => 'trees');
 
 -- Map Specific
 SELECT create_distributed_table('mapleaf', 'treeid', colocate_with => 'trees');
