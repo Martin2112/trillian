@@ -97,7 +97,13 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 			continue
 		}
 
-		sequencer := log.NewSequencer(hasher, logctx.timeSource, storage, s.keyManager)
+		keyManager, err := s.registry.GetKeyManager(logID)
+		if err != nil {
+			glog.Errorf("No key manager for log %d: %v", logID, err)
+			continue
+		}
+
+		sequencer := log.NewSequencer(hasher, logctx.timeSource, storage, keyManager)
 		sequencer.SetGuardWindow(s.guardWindow)
 
 		retrying := true

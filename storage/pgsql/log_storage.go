@@ -27,6 +27,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian"
+	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
@@ -430,7 +431,7 @@ func (t *logTreeTX) LatestSignedLogRoot() (trillian.SignedLogRoot, error) {
 func (t *logTreeTX) fetchLatestRoot() (trillian.SignedLogRoot, error) {
 	var timestamp, treeSize, treeRevision int64
 	var rootHash, rootSignatureBytes []byte
-	var rootSignature trillian.DigitallySigned
+	var rootSignature spb.DigitallySigned
 
 	err := t.tx.QueryRow(
 		selectLatestSignedLogRootSQL, t.treeID).Scan(

@@ -27,6 +27,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian"
+	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/storage"
 	_ "github.com/lib/pq"
 	"reflect"
@@ -706,7 +707,7 @@ func TestLatestSignedLogRoot(t *testing.T) {
 	defer tx.Rollback()
 
 	// TODO: Tidy up the log id as it looks silly chained 3 times like this
-	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &trillian.DigitallySigned{Signature: []byte("notempty")}}
+	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &spb.DigitallySigned{Signature: []byte("notempty")}}
 
 	if err := tx.StoreSignedLogRoot(root); err != nil {
 		t.Fatalf("Failed to store signed root: %v", err)
@@ -738,7 +739,7 @@ func TestDuplicateSignedLogRoot(t *testing.T) {
 	defer tx.Rollback()
 
 	// TODO: Tidy up the log id as it looks silly chained 3 times like this
-	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &trillian.DigitallySigned{Signature: []byte("notempty")}}
+	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &spb.DigitallySigned{Signature: []byte("notempty")}}
 
 	if err := tx.StoreSignedLogRoot(root); err != nil {
 		t.Fatalf("Failed to store signed root: %v", err)
@@ -759,14 +760,14 @@ func TestLogRootUpdate(t *testing.T) {
 	tx := beginLogTx(s, logID, t)
 
 	// TODO: Tidy up the log id as it looks silly chained 3 times like this
-	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &trillian.DigitallySigned{Signature: []byte("notempty")}}
+	root := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98765, TreeSize: 16, TreeRevision: 5, RootHash: []byte(dummyHash), Signature: &spb.DigitallySigned{Signature: []byte("notempty")}}
 
 	if err := tx.StoreSignedLogRoot(root); err != nil {
 		t.Fatalf("Failed to store signed root: %v", err)
 	}
 
 	// TODO: Tidy up the log id as it looks silly chained 3 times like this
-	root2 := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98766, TreeSize: 16, TreeRevision: 6, RootHash: []byte(dummyHash), Signature: &trillian.DigitallySigned{Signature: []byte("notempty")}}
+	root2 := trillian.SignedLogRoot{LogId: logID.logID, TimestampNanos: 98766, TreeSize: 16, TreeRevision: 6, RootHash: []byte(dummyHash), Signature: &spb.DigitallySigned{Signature: []byte("notempty")}}
 
 	if err := tx.StoreSignedLogRoot(root2); err != nil {
 		t.Fatalf("Failed to store signed root: %v", err)
