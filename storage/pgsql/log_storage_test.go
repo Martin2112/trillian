@@ -302,7 +302,7 @@ func TestQueueLeaves(t *testing.T) {
 
 	// Additional check on timestamp being set correctly in the database
 	var queueTimestamp int64
-	if err := DB.QueryRow("SELECT DISTINCT QueueTimestampNanos FROM Unsequenced WHERE TreeID=$1", logID.logID).Scan(&queueTimestamp); err != nil {
+	if err := DB.QueryRow("SELECT QueueTimestampNanos FROM Unsequenced WHERE TreeID=$1 GROUP BY QueueTimestampNanos", logID.logID).Scan(&queueTimestamp); err != nil {
 		t.Fatalf("Could not query timestamp: %v", err)
 	}
 

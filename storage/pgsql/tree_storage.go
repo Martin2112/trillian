@@ -38,7 +38,7 @@ const (
 		 VALUES($1,$2,$3,$4,$5,$6)`
 	selectTreeRevisionAtSizeOrLargerSQL = "SELECT TreeRevision,TreeSize FROM TreeHead WHERE TreeId=$1 AND TreeSize>=$2 ORDER BY TreeRevision LIMIT 1"
 	selectActiveLogsSQL                 = "SELECT TreeId, KeyId from Trees where TreeType='LOG'"
-	selectActiveLogsWithUnsequencedSQL  = "SELECT DISTINCT t.TreeId, t.KeyId from Trees t INNER JOIN Unsequenced u ON t.TreeId=u.TreeId WHERE TreeType='LOG'"
+	selectActiveLogsWithUnsequencedSQL  = "SELECT t.TreeId, t.KeyId from Trees t INNER JOIN Unsequenced u ON t.TreeId=u.TreeId WHERE TreeType='LOG' GROUP BY t.TreeId"
 	selectSubtreeSQL                    = `
  SELECT x.SubtreeId, x.MaxRevision, Subtree.Nodes
  FROM (
