@@ -33,6 +33,7 @@ import (
 
 // These statements are fixed
 const (
+	insertSubtreeSQL = `INSERT INTO Subtree(TreeId, SubtreeId, Nodes, SubtreeRevision) VALUES($1,$2,$3,$4)`
 	insertSubtreeMultiSQL = `INSERT INTO Subtree(TreeId, SubtreeId, Nodes, SubtreeRevision) ` + placeholderSQL
 	insertTreeHeadSQL     = `INSERT INTO TreeHead(TreeId,TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature)
 		 VALUES($1,$2,$3,$4,$5,$6)`
@@ -60,6 +61,7 @@ const (
 var cockroachRetryFlag = flag.Bool("cockroach_retry", false, "If true we'll attempt to roll back / retry when we see this type of error from the server")
 var cockroachClientRetryFlag = flag.Bool("cockroach_client_retry", false, "If true we'll enable client side retry custom logic for CockroachDB")
 var cockroachSnapshotIsoFlag = flag.Bool("cockroach_snapshot_isolation", false, "If true we'll request SNAPSHOT isolation level on all transactions")
+var citusSingleInsertFlag = flag.Bool("citus_single_insert", false, "If true will not do multi row inserts")
 
 // pgSQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
@@ -355,10 +357,48 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 	return ret, nil
 }
 
+func (t *treeTX) storeSubtreesSingleInsert(subtrees []*storagepb.SubtreeProto) error {
+	stx, err := t.tx.Prepare(insertSubtreeSQL)
+	if err != nil {
+		return err
+	}
+
+	defer stx.Close()
+
+	// Insert each subtree separately
+	for _, s := range subtrees {
+		args := make([]interface{}, 0, 4)
+		s := s
+		if s.Prefix == nil {
+			panic(fmt.Errorf("nil prefix on %v", s))
+		}
+		subtreeBytes, err := proto.Marshal(s)
+		if err != nil {
+			return err
+		}
+		args = append(args, t.treeID)
+		args = append(args, s.Prefix)
+		args = append(args, subtreeBytes)
+		args = append(args, t.writeRevision)
+
+		_, err = stx.Exec(args...)
+		if err != nil {
+			glog.Warningf("Failed to set merkle subtrees: %s", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (t *treeTX) storeSubtrees(subtrees []*storagepb.SubtreeProto) error {
 	if len(subtrees) == 0 {
 		glog.Warning("attempted to store 0 subtrees...")
 		return nil
+	}
+
+	if *citusSingleInsertFlag {
+		return t.storeSubtreesSingleInsert(subtrees)
 	}
 
 	// TODO(al): probably need to be able to batch this in the case where we have
