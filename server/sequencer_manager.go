@@ -74,62 +74,6 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 
 	for _, logID := range logIDs {
 		toSeq <- logID
-		// See if it's time to quit
-		select {
-		case <-logctx.ctx.Done():
-			return
-		default:
-		}
-
-		// TODO(Martin2112): Honor the sequencing enabled in log parameters, needs an API change
-		// so deferring it
-		storage, err := s.registry.GetLogStorage()
-		if err != nil {
-			glog.Warningf("%v: failed to acquire log storage: %v", logID, err)
-			continue
-		}
-		ctx := util.NewLogContext(logctx.ctx, logID)
-
-		// TODO(Martin2112): Allow for different tree hashers to be used by different logs
-		hasher, err := merkle.Factory(merkle.RFC6962SHA256Type)
-		if err != nil {
-			glog.Errorf("Unknown hash strategy for log %d: %v", logID, err)
-			continue
-		}
-
-		keyManager, err := s.registry.GetKeyManager(logID)
-		if err != nil {
-			glog.Errorf("No key manager for log %d: %v", logID, err)
-			continue
-		}
-
-		sequencer := log.NewSequencer(hasher, logctx.timeSource, storage, keyManager)
-		sequencer.SetGuardWindow(s.guardWindow)
-
-		retrying := true
-		leaves := 0
-
-		// Attempt to handle cases for CockroachDB where the transaction must be retried
-		for retrying {
-			leaves, err = sequencer.SequenceBatch(ctx, logID, logctx.batchSize)
-			if err != nil {
-				if cockroachDBRetry && strings.Contains(err.Error(), "pq: restart transaction") {
-					// Go around again for another attempt at sequencing
-					glog.Warningf("%v: Retrying sequence batch for: %v", logID, err)
-				} else {
-					// Any other error type, stop trying to sequence, wait for next run
-					glog.Warningf("%v: Error trying to sequence batch for: %v", logID, err)
-					retrying = false
-				}
-			} else {
-				retrying = false
-			}
-		}
-
-		if leaves > 0 {
-			successCount++
-			leavesAdded += leaves
-		}
 	}
 	close(toSeq)
 
@@ -165,7 +109,26 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 				sequencer := log.NewSequencer(hasher, logctx.timeSource, storage, keyManager)
 				sequencer.SetGuardWindow(s.guardWindow)
 
-				leaves, err := sequencer.SequenceBatch(ctx, logID, logctx.batchSize)
+				retrying := true
+				leaves := 0
+
+				// Attempt to handle cases for CockroachDB where the transaction must be retried
+				for retrying {
+					leaves, err = sequencer.SequenceBatch(ctx, logID, logctx.batchSize)
+					if err != nil {
+						if cockroachDBRetry && strings.Contains(err.Error(), "pq: restart transaction") {
+							// Go around again for another attempt at sequencing
+							glog.Warningf("%v: Retrying sequence batch for: %v", logID, err)
+						} else {
+							// Any other error type, stop trying to sequence, wait for next run
+							glog.Warningf("%v: Error trying to sequence batch for: %v", logID, err)
+							retrying = false
+						}
+					} else {
+						retrying = false
+					}
+				}
+
 				if err != nil {
 					glog.Warningf("%v: Error trying to sequence batch for: %v", logID, err)
 					continue
@@ -174,8 +137,10 @@ func (s SequencerManager) ExecutePass(logIDs []int64, logctx LogOperationManager
 				glog.Infof("%v: sequenced %d leaves in %.2f seconds (%.2f qps)", logID, leaves, d, float64(leaves)/d)
 
 				mu.Lock()
-				successCount++
-				leavesAdded += leaves
+				if leaves > 0 {
+					successCount++
+					leavesAdded += leaves
+				}
 				mu.Unlock()
 			}
 		}()
