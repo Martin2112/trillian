@@ -3,9 +3,5 @@
 #
 # cockroach zone set <dbname>.unsequenced --file=unsequenced.yaml
 #
-range_min_bytes: 1048576
-range_max_bytes: 67108864
 gc:
   ttlseconds: 600
-num_replicas: 3
-constraints: []
