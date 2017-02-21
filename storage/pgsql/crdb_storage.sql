@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS SequencedLeafData(
   -- CT this hash will include the leaf prefix byte as well as the leaf data.
   MerkleLeafHash       BYTEA CHECK (MerkleLeafHash IS NOT NULL And length(MerkleLeafHash) <= 255),
   PRIMARY KEY(TreeId, SequenceNumber),
-  FOREIGN KEY(TreeId) REFERENCES Trees(TreeId),
+  FOREIGN KEY(TreeId) REFERENCES Trees(TreeId)
 );
 
 CREATE TABLE IF NOT EXISTS Unsequenced(
