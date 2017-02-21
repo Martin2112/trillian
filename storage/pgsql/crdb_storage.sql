@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
   PRIMARY KEY (TreeId, LeafIdentityHash, MessageId)
 );
 
+CREATE INDEX QueueTimeIdx ON Unsequenced(QueueTimestampNanos);
 
 -- ---------------------------------------------
 -- Map specific stuff here
