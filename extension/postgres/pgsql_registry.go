@@ -37,7 +37,7 @@ var (
 // pgsql implementation of extension.Registry.
 type pgsqlRegistry struct {
 	db *sql.DB
-	km crypto.KeyManager
+	km crypto.PrivateKeyManager
 }
 
 func (r *pgsqlRegistry) GetLogStorage() (storage.LogStorage, error) {
@@ -48,7 +48,7 @@ func (r *pgsqlRegistry) GetMapStorage() (storage.MapStorage, error) {
 	return pgsql.NewMapStorage(r.db)
 }
 
-func (r *pgsqlRegistry) GetKeyManager(treeID int64) (crypto.KeyManager, error) {
+func (r *pgsqlRegistry) GetKeyManager(treeID int64) (crypto.PrivateKeyManager, error) {
 	return r.km, nil
 }
 
@@ -60,7 +60,7 @@ func NewPostgresExtensionRegistry() (extension.Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	km, err := crypto.LoadPasswordProtectedPrivateKey(*privateKeyFile, *privateKeyPassword)
+	km, err := crypto.NewFromPrivatePEMFile(*privateKeyFile, *privateKeyPassword)
 	if err != nil {
 		return nil, err
 	}

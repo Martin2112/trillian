@@ -161,6 +161,14 @@ func (t *readOnlyLogTX) Rollback() error {
 	return t.tx.Rollback()
 }
 
+func (t *readOnlyLogTX) Close() error {
+	if err := t.Rollback(); err != nil && err != sql.ErrTxDone {
+		glog.Warningf("Rollback error on Close(): %v", err)
+		return err
+	}
+	return nil
+}
+
 func (t *readOnlyLogTX) GetActiveLogIDs() ([]int64, error) {
 	return getActiveLogIDs(t.tx)
 }
@@ -229,14 +237,14 @@ func (t *logTreeTX) WriteRevision() int64 {
 	return t.treeTX.writeRevision
 }
 
-func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]trillian.LogLeaf, error) {
+func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.LogLeaf, error) {
 	stx, err := t.tx.Prepare(selectQueuedLeavesSQL)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to prepare dequeue select: %s", err)
 	}
 
-	leaves := make([]trillian.LogLeaf, 0, limit)
+	leaves := make([]*trillian.LogLeaf, 0, limit)
 	rows, err := stx.Query(t.treeID, cutoffTime.UnixNano(), limit)
 
 	if err != nil {
@@ -262,7 +270,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]trillian.L
 
 		// Note: the ExtraData being nil here is OK as the sequencer only writes to the
 		// SequencedLeafData table and the client supplied value is already written to LeafData.
-		leaf := trillian.LogLeaf{
+		leaf := &trillian.LogLeaf{
 			LeafIdentityHash: leafIDHash,
 			MerkleLeafHash:   merkleHash,
 			LeafValue:        payload,
@@ -288,7 +296,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]trillian.L
 	return leaves, nil
 }
 
-func (t *logTreeTX) QueueLeaves(leaves []trillian.LogLeaf, queueTimestamp time.Time) error {
+func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.Time) error {
 	// Don't accept batches if any of the leaves are invalid.
 	for _, leaf := range leaves {
 		if len(leaf.LeafIdentityHash) != t.hashSizeBytes {
@@ -372,7 +380,7 @@ func (t *logTreeTX) GetSequencedLeafCount() (int64, error) {
 	return sequencedLeafCount, err
 }
 
-func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]trillian.LogLeaf, error) {
+func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]*trillian.LogLeaf, error) {
 	tmpl, err := t.ls.getLeavesByIndexStmt(len(leaves))
 	if err != nil {
 		return nil, err
@@ -390,7 +398,7 @@ func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]trillian.LogLeaf, error)
 		return nil, err
 	}
 
-	ret := make([]trillian.LogLeaf, len(leaves))
+	ret := make([]*trillian.LogLeaf, len(leaves))
 	num := 0
 
 	defer rows.Close()
@@ -413,7 +421,7 @@ func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]trillian.LogLeaf, error)
 	return ret, nil
 }
 
-func (t *logTreeTX) GetLeavesByHash(leafHashes [][]byte, orderBySequence bool) ([]trillian.LogLeaf, error) {
+func (t *logTreeTX) GetLeavesByHash(leafHashes [][]byte, orderBySequence bool) ([]*trillian.LogLeaf, error) {
 	tmpl, err := t.ls.getLeavesByMerkleHashStmt(len(leafHashes), orderBySequence)
 
 	if err != nil {
@@ -477,7 +485,7 @@ func (t *logTreeTX) StoreSignedLogRoot(root trillian.SignedLogRoot) error {
 	return checkResultOkAndRowCountIs(res, err, 1)
 }
 
-func (t *logTreeTX) UpdateSequencedLeaves(leaves []trillian.LogLeaf) error {
+func (t *logTreeTX) UpdateSequencedLeaves(leaves []*trillian.LogLeaf) error {
 	// TODO: In theory we can do this with CASE / WHEN in one SQL statement but it's more fiddly
 	// and can be implemented later if necessary
 	for _, leaf := range leaves {
@@ -498,7 +506,7 @@ func (t *logTreeTX) UpdateSequencedLeaves(leaves []trillian.LogLeaf) error {
 	return nil
 }
 
-func (t *logTreeTX) removeSequencedLeaves(leaves []trillian.LogLeaf) error {
+func (t *logTreeTX) removeSequencedLeaves(leaves []*trillian.LogLeaf) error {
 	tmpl, err := t.ls.getDeleteUnsequencedStmt(2, len(leaves))
 	if err != nil {
 		glog.Warningf("Failed to get delete statement for sequenced work: %s", err)
@@ -528,7 +536,7 @@ func (t *logTreeTX) removeSequencedLeaves(leaves []trillian.LogLeaf) error {
 	return nil
 }
 
-func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, tmpl *sql.Stmt, desc string) ([]trillian.LogLeaf, error) {
+func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, tmpl *sql.Stmt, desc string) ([]*trillian.LogLeaf, error) {
 	stx := t.tx.Stmt(tmpl)
 	var args []interface{}
 	// Fixed parameter first
@@ -543,7 +551,7 @@ func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, tmpl *sql.Stmt,
 	}
 
 	// The tree could include duplicates so we don't know how many results will be returned
-	var ret []trillian.LogLeaf
+	var ret []*trillian.LogLeaf
 
 	defer rows.Close()
 	for rows.Next() {
@@ -558,7 +566,7 @@ func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, tmpl *sql.Stmt,
 			return nil, fmt.Errorf("LogID: %d Scanned leaf %s does not have hash length %d, got %d", t.treeID, desc, want, got)
 		}
 
-		ret = append(ret, leaf)
+		ret = append(ret, &leaf)
 	}
 
 	return ret, nil
