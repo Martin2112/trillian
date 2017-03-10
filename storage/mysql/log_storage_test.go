@@ -534,7 +534,8 @@ func TestQueueLeavesBucketed(t *testing.T) {
 	increments := []time.Duration{0, 0, 1 * time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second,
 		5 * time.Second, 6 * time.Second, 7 * time.Second, 8 * time.Second, 9 * time.Second, 10 * time.Second,
 		11 * time.Second, 12 * time.Second, 13 * time.Second, 14 * time.Second, 15 * time.Second,
-		16 * time.Second, 17 * time.Second, 18 * time.Second, 19 * time.Second}
+		16 * time.Second, 17 * time.Second, 18 * time.Second, 19 * time.Second, 20 * time.Second,
+	  21 * time.Second, 22 * time.Second, 23 * time.Second, 24 * time.Second, 25 * time.Seconds}
 	ts := util.IncrementingFakeTimeSource{BaseTime: fakeQueueTime, Increments: increments}
 	config := &storagepb.LogStorageConfig{
 		EnableBuckets:    true,

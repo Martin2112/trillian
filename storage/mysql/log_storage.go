@@ -74,6 +74,9 @@ const (
 	numByteValues                                = 256
 )
 
+// Turns on latency logging for some operations
+const logLatency bool = true
+
 var defaultLogStrata = []int{8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}
 
 type mySQLLogStorage struct {
@@ -268,6 +271,8 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	args = append(args, interface{}(cutoffTime.UnixNano()))
 	args = append(args, interface{}(limit))
 
+	start := t.ls.timeSource.Now()
+
 	tmpl, err := t.ls.getStmt(selectQueuedLeavesSQL, len(buckets), "?", "?")
 	if err != nil {
 		glog.Warningf("Failed to prepare dequeue select: %s", err)
@@ -281,6 +286,9 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 		glog.Warningf("Failed to select rows for dequeue: %s", err)
 		return nil, err
 	}
+
+	ldq := t.ls.timeSource.Now()
+	t.logLatency("Select Leaves", start)
 
 	defer rows.Close()
 
@@ -309,6 +317,9 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 		leaves = append(leaves, leaf)
 	}
 
+	lsc := t.ls.timeSource.Now()
+	t.logLatency("Scan Leaves", ldq)
+
 	if rows.Err() != nil {
 		return nil, rows.Err()
 	}
@@ -318,6 +329,8 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	if len(leaves) > 0 {
 		err = t.removeSequencedLeaves(leaves)
 	}
+
+	t.logLatency("Delete Leaves", lsc)
 
 	if err != nil {
 		return nil, err
@@ -590,6 +603,14 @@ func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, tmpl *sql.Stmt,
 // GetActiveLogIDs returns a list of the IDs of all configured logs
 func (t *logTreeTX) GetActiveLogIDs() ([]int64, error) {
 	return getActiveLogIDs(t.tx)
+}
+
+func (t *logTreeTX) logLatency(label string, start time.Time) {
+	if logLatency {
+		now := t.ls.timeSource.Now()
+		d := now.Sub(start).Seconds()
+		glog.Infof("%s Latency: %.2f sec", label, d)
+	}
 }
 
 // GetActiveLogIDsWithPendingWork returns a list of the IDs of all configured logs
