@@ -71,7 +71,9 @@ const (
 	// Same as above except with leaves ordered by sequence so we only incur this cost when necessary
 	orderBySequenceNumberSQL                     = " ORDER BY s.SequenceNumber"
 	selectLeavesByMerkleHashOrderedBySequenceSQL = selectLeavesByMerkleHashSQL + orderBySequenceNumberSQL
+
 	numByteValues                                = 256
+	deleteBatchSize                              = 100
 )
 
 // Turns on latency logging for some operations
@@ -538,28 +540,38 @@ func (t *logTreeTX) removeSequencedLeaves(leaves []*trillian.LogLeaf) error {
 	// Delete in order of the hash values in the leaves.
 	sort.Sort(byLeafIdentityHash(leaves))
 
-	tmpl, err := t.ls.getDeleteUnsequencedStmt(len(leaves))
-	if err != nil {
-		glog.Warningf("Failed to get delete statement for sequenced work: %s", err)
-		return err
-	}
-	stx := t.tx.Stmt(tmpl)
-	var args []interface{}
-	for _, leaf := range leaves {
-		args = append(args, interface{}(leaf.LeafIdentityHash))
-	}
-	args = append(args, interface{}(t.treeID))
-	result, err := stx.Exec(args...)
+	left := len(leaves)
+	pos := 0
+	for left > 0 {
+		bs := left
+		if bs > deleteBatchSize {
+			bs = deleteBatchSize
+		}
+		tmpl, err := t.ls.getDeleteUnsequencedStmt(bs)
+		if err != nil {
+			glog.Warningf("Failed to get delete statement for sequenced work: %s", err)
+			return err
+		}
+		stx := t.tx.Stmt(tmpl)
+		var args []interface{}
+		for l := pos; l < pos+bs; l++ {
+			args = append(args, interface{}(leaves[l].LeafIdentityHash))
+		}
+		args = append(args, interface{}(t.treeID))
+		result, err := stx.Exec(args...)
 
-	if err != nil {
-		// Error is handled by checkResultOkAndRowCountIs() below
-		glog.Warningf("Failed to delete sequenced work: %s", err)
-	}
+		if err != nil {
+			// Error is handled by checkResultOkAndRowCountIs() below
+			glog.Warningf("Failed to delete sequenced work: %s", err)
+		}
 
-	err = checkResultOkAndRowCountIs(result, err, int64(len(leaves)))
+		err = checkResultOkAndRowCountIs(result, err, int64(bs))
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
+		left -= bs
+		pos += bs
 	}
 
 	return nil
