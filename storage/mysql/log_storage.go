@@ -38,7 +38,7 @@ import (
 
 const (
 	getTreePropertiesSQL  = "SELECT DuplicatePolicy FROM Trees WHERE TreeId=?"
-	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash
+	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash,Bucket,QueueTimestampNanos
 			FROM Unsequenced
 			WHERE TreeID=?
 			AND Bucket IN(<placeholder>)
@@ -59,6 +59,8 @@ const (
 
 	// These statements need to be expanded to provide the correct number of parameter placeholders.
 	deleteUnsequencedSQL   = "DELETE FROM Unsequenced WHERE LeafIdentityHash IN (<placeholder>) AND TreeId = ?"
+	deleteOneUnsequencedSQL = "DELETE FROM Unsequenced WHERE TreeId=? AND Bucket=? AND QueueTimestampNanos=? AND MerkleLeafHash=?"
+
 	selectLeavesByIndexSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData
 			FROM LeafData l,SequencedLeafData s
 			WHERE l.LeafIdentityHash = s.LeafIdentityHash
@@ -115,6 +117,10 @@ func (m *mySQLLogStorage) getLeavesByMerkleHashStmt(num int, orderBySequence boo
 
 func (m *mySQLLogStorage) getDeleteUnsequencedStmt(num int) (*sql.Stmt, error) {
 	return m.getStmt(deleteUnsequencedSQL, num, "?", "?")
+}
+
+func (m *mySQLLogStorage) getDeleteOneUnsequencedStmt() (*sql.Stmt, error) {
+	return m.getStmt(deleteOneUnsequencedSQL, 1, "?", "?")
 }
 
 func getActiveLogIDsInternal(tx *sql.Tx, sql string) ([]int64, error) {
@@ -255,6 +261,13 @@ func (t *logTreeTX) WriteRevision() int64 {
 	return t.treeTX.writeRevision
 }
 
+// dequeuedLeaf is used internally and contains some data that is not exposed to the client
+type dequeuedLeaf struct {
+	bucket int
+	queueTimestampNanos int64
+	merkleLeafHash []byte
+}
+
 func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.LogLeaf, error) {
 	// Get a list of buckets we'll try to take from. The idea is that queueing and dequeuing
 	// will be updating different ranges of the key space at any time. On some storage
@@ -282,6 +295,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	}
 
 	leaves := make([]*trillian.LogLeaf, 0, limit)
+	dql := make([]dequeuedLeaf, 0, limit)
 	stx := t.tx.Stmt(tmpl)
 	rows, err := stx.Query(args...)
 	if err != nil {
@@ -297,8 +311,10 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	for rows.Next() {
 		var leafIDHash []byte
 		var merkleHash []byte
+		var dqBucket int
+		var qtNanos int64
 
-		err := rows.Scan(&leafIDHash, &merkleHash)
+		err := rows.Scan(&leafIDHash, &merkleHash, &dqBucket, &qtNanos)
 
 		if err != nil {
 			glog.Warningf("Error scanning queued rows: %s", err)
@@ -317,6 +333,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 			MerkleLeafHash:   merkleHash,
 		}
 		leaves = append(leaves, leaf)
+		dql = append(dql, dequeuedLeaf{bucket:dqBucket, queueTimestampNanos:qtNanos, merkleLeafHash:merkleHash})
 	}
 
 	lsc := t.ls.timeSource.Now()
@@ -329,7 +346,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	// The convention is that if leaf processing succeeds (by committing this tx)
 	// then the unsequenced entries for them are removed
 	if len(leaves) > 0 {
-		err = t.removeSequencedLeaves(leaves)
+		err = t.removeSequencedLeaves2(dql)
 	}
 
 	t.logLatency("Delete Leaves", lsc)
@@ -572,6 +589,31 @@ func (t *logTreeTX) removeSequencedLeaves(leaves []*trillian.LogLeaf) error {
 		}
 		left -= bs
 		pos += bs
+	}
+
+	return nil
+}
+
+// removeSequencedLeaves removes the passed in leaves slice (which may be
+// modified as part of the operation).
+func (t *logTreeTX) removeSequencedLeaves2(leaves []dequeuedLeaf) error {
+	// Delete in order of the hash values in the leaves.
+	// sort.Sort(byLeafIdentityHash(leaves))
+
+	tmpl, err := t.ls.getDeleteOneUnsequencedStmt()
+	if err != nil {
+		glog.Warningf("Failed to get delete statement for sequenced work: %s", err)
+		return err
+	}
+
+	stx := t.tx.Stmt(tmpl)
+	for _, dql := range leaves {
+		result, err := stx.Exec(t.treeID, dql.bucket, dql.queueTimestampNanos, dql.merkleLeafHash)
+		err = checkResultOkAndRowCountIs(result, err, int64(1))
+
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
