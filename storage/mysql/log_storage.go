@@ -695,8 +695,8 @@ func (t *logTreeTX) logLatencyBetween(label string, start,end time.Time) {
 
 func (t *logTreeTX) logLatencyQps(label string, d time.Duration, q int) {
 	if logLatency {
-		qps := d.Seconds() / float64(q)
-		glog.Infof("%s Latency: %.2f sec for %d items (%.2f qps)", label, d, q, qps)
+		qps := float64(q) / d.Seconds()
+		glog.Infof("%s Latency: %.2f sec for %d items (%.2f qps)", label, d.Seconds(), q, qps)
 	}
 }
 
