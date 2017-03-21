@@ -382,13 +382,31 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 	copy(orderedLeaves, leaves)
 	sort.Sort(byLeafIdentityHash(orderedLeaves))
 
+	// These accumulate the time spent on each type of insert
+	var ldDur time.Duration
+	var usDur time.Duration
+
+	lTmpl, err := t.ts.getStmt(insertSQL, 1, "?", "?")
+	if err != nil {
+		return err
+	}
+	uTmpl, err := t.ts.getStmt(insertUnsequencedEntrySQL, 1, "?", "?")
+	if err != nil {
+		return err
+	}
+
+	lStmt := t.tx.Stmt(lTmpl)
+	uStmt := t.tx.Stmt(uTmpl)
+
 	now := t.ls.timeSource.Now().UTC().Unix()
 	for i, leaf := range orderedLeaves {
 		// Create the unsequenced leaf data entry. We don't use INSERT IGNORE because this
 		// can suppress errors unrelated to key collisions. We don't use REPLACE because
 		// if there's ever a hash collision it will do the wrong thing and it also
 		// causes a DELETE / INSERT, which is undesirable.
-		_, err := t.tx.Exec(insertSQL, t.treeID, leaf.LeafIdentityHash, leaf.LeafValue, leaf.ExtraData)
+		preIns := t.ls.timeSource.Now()
+		_, err := lStmt.Exec(t.treeID, leaf.LeafIdentityHash, leaf.LeafValue, leaf.ExtraData)
+		ldDur += t.ls.timeSource.Now().Sub(preIns)
 		if err != nil {
 			if strings.Contains(err.Error(), "Duplicate entry") {
 				return storage.Error{
@@ -404,14 +422,19 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 		// Create the work queue entry
 		bucket := getQueueBucket(now, t.ls.config, leaf.MerkleLeafHash[0])
 
-		_, err = t.tx.Exec(insertUnsequencedEntrySQL,
-			t.treeID, bucket, leaf.LeafIdentityHash, leaf.MerkleLeafHash, queueTimestamp.UnixNano())
+		preIns = t.ls.timeSource.Now()
+		_, err = uStmt.Exec(t.treeID, bucket, leaf.LeafIdentityHash, leaf.MerkleLeafHash,
+			queueTimestamp.UnixNano())
+		usDur += t.ls.timeSource.Now().Sub(preIns)
 
 		if err != nil {
 			glog.Warningf("Error inserting into Unsequenced: %s", err)
 			return fmt.Errorf("Unsequenced: %v", err)
 		}
 	}
+
+	t.logLatencyQps("insert LeafData", ldDur, len(leaves))
+	t.logLatencyQps("insert Unsequenced", usDur, len(leaves))
 
 	return nil
 }
@@ -660,10 +683,20 @@ func (t *logTreeTX) GetActiveLogIDs() ([]int64, error) {
 }
 
 func (t *logTreeTX) logLatency(label string, start time.Time) {
+	t.logLatencyBetween(label, start, t.ls.timeSource.Now())
+}
+
+func (t *logTreeTX) logLatencyBetween(label string, start,end time.Time) {
 	if logLatency {
-		now := t.ls.timeSource.Now()
-		d := now.Sub(start).Seconds()
+		d := end.Sub(start).Seconds()
 		glog.Infof("%s Latency: %.2f sec", label, d)
+	}
+}
+
+func (t *logTreeTX) logLatencyQps(label string, d time.Duration, q int) {
+	if logLatency {
+		qps := d.Seconds() / float64(q)
+		glog.Infof("%s Latency: %.2f sec for %d items (%.2f qps)", label, d, q, qps)
 	}
 }
 
