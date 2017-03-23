@@ -68,3 +68,13 @@ message LogStorageConfig {
   // always be zero. Otherwise it's enabled and the rules listed above apply.
   bool enable_buckets = 3;
 }
+
+// LeafDataProto bundles up the leaf value and extra data for log entries. This reduces the
+// number of BLOB fields that the database has to insert and manage. These values are never
+// queried and are always returned together anyway.
+message LeafDataProto {
+  // The leaf data - this must be set
+  bytes leaf_value = 1;
+  // The extra data - this is optional
+  bytes extra_data = 2;
+}
