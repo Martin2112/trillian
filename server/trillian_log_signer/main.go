@@ -25,9 +25,9 @@ import (
 	"github.com/google/trillian/extension"
 	"github.com/google/trillian/monitoring/metric"
 	"github.com/google/trillian/server"
+	"github.com/google/trillian/storage/coresql"
 	"github.com/google/trillian/util"
 	"golang.org/x/net/context"
-	"github.com/google/trillian/storage/coresql"
 )
 
 var (

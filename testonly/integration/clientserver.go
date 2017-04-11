@@ -29,12 +29,12 @@ import (
 	"github.com/google/trillian/crypto/keys"
 	"github.com/google/trillian/extension"
 	"github.com/google/trillian/server"
+	"github.com/google/trillian/storage/coresql"
 	"github.com/google/trillian/storage/mysql"
 	stestonly "github.com/google/trillian/storage/testonly"
 	"github.com/google/trillian/testonly"
 	"github.com/google/trillian/util"
 	"google.golang.org/grpc"
-	"github.com/google/trillian/storage/coresql"
 )
 
 var (

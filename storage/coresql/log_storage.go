@@ -96,7 +96,7 @@ func (m *mySQLLogStorage) Snapshot(ctx context.Context) (storage.ReadOnlyLogTX, 
 		glog.Warningf("Could not start ReadOnlyLogTX: %s", err)
 		return nil, err
 	}
-	return &readOnlyLogTX{tx:tx, wrap:m.wrap}, nil
+	return &readOnlyLogTX{tx: tx, wrap: m.wrap}, nil
 }
 
 func (t *readOnlyLogTX) Commit() error {
@@ -332,7 +332,7 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 			toRetrieve = append(toRetrieve, existing.LeafIdentityHash)
 		}
 	}
-	results, err := t.getLeafDataByIdentityHash(toRetrieve)
+	results, err := t.GetLeafDataByIdentityHash(toRetrieve)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve existing leaves: %v", err)
 	}
@@ -427,10 +427,10 @@ func (t *logTreeTX) GetLeavesByHash(leafHashes [][]byte, orderBySequence bool) (
 	return t.getLeavesByHashInternal(leafHashes, stmt, "merkle")
 }
 
-// getLeafDataByIdentityHash retrieves leaf data by LeafIdentityHash, returned
+// GetLeafDataByIdentityHash retrieves leaf data by LeafIdentityHash, returned
 // as a slice of LogLeaf objects for convenience.  However, note that the
 // returned LogLeaf objects will not have a valid MerkleLeafHash or LeafIndex.
-func (t *logTreeTX) getLeafDataByIdentityHash(leafHashes [][]byte) ([]*trillian.LogLeaf, error) {
+func (t *logTreeTX) GetLeafDataByIdentityHash(leafHashes [][]byte) ([]*trillian.LogLeaf, error) {
 	stmt, err := t.ls.wrap.GetLeavesByLeafIdentityHashStmt(t.tx, len(leafHashes))
 	if err != nil {
 		return nil, err
