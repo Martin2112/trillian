@@ -26,6 +26,7 @@ import (
 	"github.com/google/trillian/monitoring/metric"
 	"github.com/google/trillian/server"
 	"github.com/google/trillian/storage/coresql"
+	"github.com/google/trillian/storage/db"
 	"github.com/google/trillian/util"
 	"golang.org/x/net/context"
 )
@@ -54,7 +55,7 @@ func main() {
 	}
 
 	// First make sure we can access the database, quit if not
-	wrap, err := coresql.OpenDB(*dbDriver, *dbURI)
+	wrap, err := db.OpenDB(*dbDriver, *dbURI)
 	if err != nil {
 		glog.Exitf("Failed to open MySQL database: %v", err)
 	}
