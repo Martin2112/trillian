@@ -18,52 +18,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
-	"sync"
 
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
+	"github.com/google/trillian/storage/coresql"
 	"github.com/google/trillian/storage/storagepb"
-)
-
-// These statements are fixed
-const (
-	insertSubtreeMultiSQL = `INSERT INTO Subtree(TreeId, SubtreeId, Nodes, SubtreeRevision) ` + placeholderSQL
-	insertTreeHeadSQL     = `INSERT INTO TreeHead(TreeId,TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature)
-		 VALUES(?,?,?,?,?,?)`
-	selectTreeRevisionAtSizeOrLargerSQL = "SELECT TreeRevision,TreeSize FROM TreeHead WHERE TreeId=? AND TreeSize>=? ORDER BY TreeRevision LIMIT 1"
-	selectActiveLogsSQL                 = "SELECT TreeId from Trees where TreeType='LOG'"
-	selectActiveLogsWithUnsequencedSQL  = "SELECT DISTINCT t.TreeId from Trees t INNER JOIN Unsequenced u WHERE TreeType='LOG' AND t.TreeId=u.TreeId"
-
-	selectSubtreeSQL = `
- SELECT x.SubtreeId, x.MaxRevision, Subtree.Nodes
- FROM (
- 	SELECT n.SubtreeId, max(n.SubtreeRevision) AS MaxRevision
-	FROM Subtree n
-	WHERE n.SubtreeId IN (` + placeholderSQL + `) AND
-	 n.TreeId = ? AND n.SubtreeRevision <= ?
-	GROUP BY n.SubtreeId
- ) AS x
- INNER JOIN Subtree 
- ON Subtree.SubtreeId = x.SubtreeId 
- AND Subtree.SubtreeRevision = x.MaxRevision 
- AND Subtree.TreeId = ?`
-	placeholderSQL = "<placeholder>"
 )
 
 // mySQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
 // Storage implementations, and contains functionality which is common to both,
 type mySQLTreeStorage struct {
-	db *sql.DB
-
-	// Must hold the mutex before manipulating the statement map. Sharing a lock because
-	// it only needs to be held while the statements are built, not while they execute and
-	// this will be a short time. These maps are from the number of placeholder '?'
-	// in the query to the statement that should be used.
-	statementMutex sync.Mutex
-	statements     map[string]map[int]*sql.Stmt
+	db       *sql.DB
+	provider coresql.StatementProvider
 }
 
 // OpenDB opens a database connection for all MySQL-based storage implementations.
@@ -85,59 +53,9 @@ func OpenDB(dbURL string) (*sql.DB, error) {
 
 func newTreeStorage(db *sql.DB) *mySQLTreeStorage {
 	return &mySQLTreeStorage{
-		db:         db,
-		statements: make(map[string]map[int]*sql.Stmt),
+		db:       db,
+		provider: NewStatementProvider(db),
 	}
-}
-
-// expandPlaceholderSQL expands an sql statement by adding a specified number of '?'
-// placeholder slots. At most one placeholder will be expanded.
-func expandPlaceholderSQL(sql string, num int, first, rest string) string {
-	if num <= 0 {
-		panic(fmt.Errorf("Trying to expand SQL placeholder with <= 0 parameters: %s", sql))
-	}
-
-	parameters := first + strings.Repeat(","+rest, num-1)
-
-	return strings.Replace(sql, placeholderSQL, parameters, 1)
-}
-
-// getStmt creates and caches sql.Stmt structs based on the passed in statement
-// and number of bound arguments.
-// TODO(al,martin): consider pulling this all out as a separate unit for reuse
-// elsewhere.
-func (m *mySQLTreeStorage) getStmt(statement string, num int, first, rest string) (*sql.Stmt, error) {
-	m.statementMutex.Lock()
-	defer m.statementMutex.Unlock()
-
-	if m.statements[statement] != nil {
-		if m.statements[statement][num] != nil {
-			// TODO(al,martin): we'll possibly need to expire Stmts from the cache,
-			// e.g. when DB connections break etc.
-			return m.statements[statement][num], nil
-		}
-	} else {
-		m.statements[statement] = make(map[int]*sql.Stmt)
-	}
-
-	s, err := m.db.Prepare(expandPlaceholderSQL(statement, num, first, rest))
-
-	if err != nil {
-		glog.Warningf("Failed to prepare statement %d: %s", num, err)
-		return nil, err
-	}
-
-	m.statements[statement][num] = s
-
-	return s, nil
-}
-
-func (m *mySQLTreeStorage) getSubtreeStmt(num int) (*sql.Stmt, error) {
-	return m.getStmt(selectSubtreeSQL, num, "?", "?")
-}
-
-func (m *mySQLTreeStorage) setSubtreeStmt(num int) (*sql.Stmt, error) {
-	return m.getStmt(insertSubtreeMultiSQL, num, "VALUES(?, ?, ?, ?)", "(?, ?, ?, ?)")
 }
 
 func (m *mySQLTreeStorage) beginTreeTx(ctx context.Context, treeID int64, hashSizeBytes int, strataDepths []int, populate storage.PopulateSubtreeFunc, prepare storage.PrepareSubtreeWriteFunc) (treeTX, error) {
@@ -187,12 +105,11 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 		return nil, nil
 	}
 
-	tmpl, err := t.ts.getSubtreeStmt(len(nodeIDs))
+	stmt, err := t.ts.provider.GetSubtreeStmt(t.tx, len(nodeIDs))
 	if err != nil {
 		return nil, err
 	}
-	stx := t.tx.Stmt(tmpl)
-	defer stx.Close()
+	defer stmt.Close()
 
 	args := make([]interface{}, 0, len(nodeIDs)+3)
 
@@ -211,7 +128,7 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 	args = append(args, interface{}(treeRevision))
 	args = append(args, interface{}(t.treeID))
 
-	rows, err := stx.Query(args...)
+	rows, err := stmt.Query(args...)
 	if err != nil {
 		glog.Warningf("Failed to get merkle subtrees: %s", err)
 		return nil, err
@@ -276,14 +193,13 @@ func (t *treeTX) storeSubtrees(subtrees []*storagepb.SubtreeProto) error {
 		args = append(args, t.writeRevision)
 	}
 
-	tmpl, err := t.ts.setSubtreeStmt(len(subtrees))
+	stmt, err := t.ts.provider.SetSubtreeStmt(t.tx, len(subtrees))
 	if err != nil {
 		return err
 	}
-	stx := t.tx.Stmt(tmpl)
-	defer stx.Close()
+	defer stmt.Close()
 
-	r, err := stx.Exec(args...)
+	r, err := stmt.Exec(args...)
 	if err != nil {
 		glog.Warningf("Failed to set merkle subtrees: %s", err)
 		return err
@@ -324,8 +240,12 @@ func (t *treeTX) GetTreeRevisionIncludingSize(treeSize int64) (int64, int64, err
 	}
 
 	var treeRevision, actualTreeSize int64
-	err := t.tx.QueryRow(selectTreeRevisionAtSizeOrLargerSQL, t.treeID, treeSize).Scan(&treeRevision, &actualTreeSize)
-
+	stmt, err := t.ts.provider.GetTreeRevisionIncludingSizeStmt(t.tx)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer stmt.Close()
+	err = stmt.QueryRow(t.treeID, treeSize).Scan(&treeRevision, &actualTreeSize)
 	return treeRevision, actualTreeSize, err
 }
 
@@ -393,17 +313,4 @@ func (t *treeTX) Close() error {
 
 func (t *treeTX) IsOpen() bool {
 	return !t.closed
-}
-
-func checkDatabaseAccessible(ctx context.Context, db *sql.DB) error {
-	_ = ctx
-
-	stmt, err := db.Prepare("SELECT TreeId FROM Trees LIMIT 1")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec()
-	return err
 }
