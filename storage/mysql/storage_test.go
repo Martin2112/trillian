@@ -39,7 +39,7 @@ func TestNodeRoundTrip(t *testing.T) {
 	logID := createLogForTests(DB)
 	s := coresql.NewLogStorage(NewWrapper(DB))
 
-	const writeRevision = int64(100)
+	var writeRevision int64
 	nodesToStore := createSomeNodes()
 	nodeIDsToRead := make([]storage.NodeID, len(nodesToStore))
 	for i := range nodesToStore {
@@ -48,57 +48,8 @@ func TestNodeRoundTrip(t *testing.T) {
 
 	{
 		tx := beginLogTx(s, logID, t)
+		writeRevision = tx.WriteRevision()
 		defer tx.Close()
-		//forceWriteRevision(writeRevision, tx)
-
-		// Need to read nodes before attempting to write
-		if _, err := tx.GetMerkleNodes(99, nodeIDsToRead); err != nil {
-			t.Fatalf("Failed to read nodes: %s", err)
-		}
-		if err := tx.SetMerkleNodes(nodesToStore); err != nil {
-			t.Fatalf("Failed to store nodes: %s", err)
-		}
-		if err := tx.Commit(); err != nil {
-			t.Fatalf("Failed to commit nodes: %s", err)
-		}
-	}
-
-	{
-		tx := beginLogTx(s, logID, t)
-		defer tx.Close()
-
-		readNodes, err := tx.GetMerkleNodes(100, nodeIDsToRead)
-		if err != nil {
-			t.Fatalf("Failed to retrieve nodes: %s", err)
-		}
-		if err := nodesAreEqual(readNodes, nodesToStore); err != nil {
-			t.Fatalf("Read back different nodes from the ones stored: %s", err)
-		}
-		commit(tx, t)
-	}
-}
-
-// This test ensures that node writes cross subtree boundaries so this edge case in the subtree
-// cache gets exercised. Any tree size > 256 will do this.
-func TestLogNodeRoundTripMultiSubtree(t *testing.T) {
-	cleanTestDB(DB)
-	logID := createLogForTests(DB)
-	s := coresql.NewLogStorage(NewWrapper(DB))
-
-	const writeRevision = int64(100)
-	nodesToStore, err := createLogNodesForTreeAtSize(871, writeRevision)
-	if err != nil {
-		t.Fatalf("failed to create test tree: %v", err)
-	}
-	nodeIDsToRead := make([]storage.NodeID, len(nodesToStore))
-	for i := range nodesToStore {
-		nodeIDsToRead[i] = nodesToStore[i].NodeID
-	}
-
-	{
-		tx := beginLogTx(s, logID, t)
-		defer tx.Close()
-		//forceWriteRevision(writeRevision, tx)
 
 		// Need to read nodes before attempting to write
 		if _, err := tx.GetMerkleNodes(writeRevision-1, nodeIDsToRead); err != nil {
@@ -116,7 +67,56 @@ func TestLogNodeRoundTripMultiSubtree(t *testing.T) {
 		tx := beginLogTx(s, logID, t)
 		defer tx.Close()
 
-		readNodes, err := tx.GetMerkleNodes(100, nodeIDsToRead)
+		readNodes, err := tx.GetMerkleNodes(writeRevision, nodeIDsToRead)
+		if err != nil {
+			t.Fatalf("Failed to retrieve nodes: %s", err)
+		}
+		if err := nodesAreEqual(readNodes, nodesToStore); err != nil {
+			t.Fatalf("Read back different nodes from the ones stored: %s", err)
+		}
+		commit(tx, t)
+	}
+}
+
+// This test ensures that node writes cross subtree boundaries so this edge case in the subtree
+// cache gets exercised. Any tree size > 256 will do this.
+func TestLogNodeRoundTripMultiSubtree(t *testing.T) {
+	cleanTestDB(DB)
+	logID := createLogForTests(DB)
+	s := coresql.NewLogStorage(NewWrapper(DB))
+
+	var writeRevision int64
+	nodesToStore, err := createLogNodesForTreeAtSize(871, writeRevision)
+	if err != nil {
+		t.Fatalf("failed to create test tree: %v", err)
+	}
+	nodeIDsToRead := make([]storage.NodeID, len(nodesToStore))
+	for i := range nodesToStore {
+		nodeIDsToRead[i] = nodesToStore[i].NodeID
+	}
+
+	{
+		tx := beginLogTx(s, logID, t)
+		writeRevision = tx.WriteRevision()
+		defer tx.Close()
+
+		// Need to read nodes before attempting to write
+		if _, err := tx.GetMerkleNodes(writeRevision-1, nodeIDsToRead); err != nil {
+			t.Fatalf("Failed to read nodes: %s", err)
+		}
+		if err := tx.SetMerkleNodes(nodesToStore); err != nil {
+			t.Fatalf("Failed to store nodes: %s", err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("Failed to commit nodes: %s", err)
+		}
+	}
+
+	{
+		tx := beginLogTx(s, logID, t)
+		defer tx.Close()
+
+		readNodes, err := tx.GetMerkleNodes(writeRevision, nodeIDsToRead)
 		if err != nil {
 			t.Fatalf("Failed to retrieve nodes: %s", err)
 		}
