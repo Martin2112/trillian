@@ -25,13 +25,14 @@ import (
 	"github.com/google/trillian/extension"
 	"github.com/google/trillian/monitoring/metric"
 	"github.com/google/trillian/server"
-	"github.com/google/trillian/storage/mysql"
 	"github.com/google/trillian/util"
 	"golang.org/x/net/context"
+	"github.com/google/trillian/storage/coresql"
 )
 
 var (
-	mySQLURI                      = flag.String("mysql_uri", "test:zaphod@tcp(127.0.0.1:3306)/test", "Connection URI for MySQL database")
+	dbDriver                      = flag.String("db_driver", "mysql", "Name of database driver to use (must be known to us)")
+	dbURI                         = flag.String("db_uri", "test:zaphod@tcp(127.0.0.1:3306)/test", "Connection URI for database")
 	exportRPCMetrics              = flag.Bool("export_metrics", true, "If true starts HTTP server and exports stats")
 	httpPortFlag                  = flag.Int("http_port", 8091, "Port to serve HTTP metrics on")
 	sequencerSleepBetweenRunsFlag = flag.Duration("sequencer_sleep_between_runs", time.Second*10, "Time to pause after each sequencing pass through all logs")
@@ -53,16 +54,16 @@ func main() {
 	}
 
 	// First make sure we can access the database, quit if not
-	db, err := mysql.OpenDB(*mySQLURI)
+	wrap, err := coresql.OpenDB(*dbDriver, *dbURI)
 	if err != nil {
 		glog.Exitf("Failed to open MySQL database: %v", err)
 	}
-	defer db.Close()
+	defer wrap.DB().Close()
 
 	registry := extension.Registry{
-		AdminStorage:  mysql.NewAdminStorage(db),
+		AdminStorage:  coresql.NewAdminStorage(wrap),
 		SignerFactory: keys.PEMSignerFactory{},
-		LogStorage:    mysql.NewLogStorage(db),
+		LogStorage:    coresql.NewLogStorage(wrap),
 	}
 
 	// Start HTTP server (optional)

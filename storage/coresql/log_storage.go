@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mysql
+package coresql
 
 import (
 	"bytes"
@@ -32,8 +32,8 @@ import (
 	"github.com/google/trillian/monitoring/metric"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
-	"github.com/google/trillian/storage/coresql"
 	"github.com/google/trillian/trees"
+	"github.com/google/trillian/storage/wrapper"
 )
 
 var (
@@ -48,17 +48,17 @@ type mySQLLogStorage struct {
 	admin storage.AdminStorage
 }
 
-// NewLogStorage creates a storage.LogStorage instance for the specified MySQL URL.
+// NewLogStorage creates a mySQLLogStorage instance for the specified MySQL URL.
 // It assumes storage.AdminStorage is backed by the same MySQL database as well.
-func NewLogStorage(db *sql.DB) storage.LogStorage {
+func NewLogStorage(wrapper wrapper.DBWrapper) storage.LogStorage {
 	return &mySQLLogStorage{
-		admin:            NewAdminStorage(db),
-		mySQLTreeStorage: newTreeStorage(db),
+		admin:            NewAdminStorage(wrapper),
+		mySQLTreeStorage: newTreeStorage(wrapper),
 	}
 }
 
 func (m *mySQLLogStorage) CheckDatabaseAccessible(ctx context.Context) error {
-	return m.provider.CheckDatabaseAccessible(ctx, m.db)
+	return m.wrap.CheckDatabaseAccessible(ctx)
 }
 
 func getActiveLogIDsInternal(stmt *sql.Stmt) ([]int64, error) {
@@ -86,17 +86,17 @@ func getActiveLogIDsInternal(stmt *sql.Stmt) ([]int64, error) {
 
 // readOnlyLogTX implements storage.ReadOnlyLogTX
 type readOnlyLogTX struct {
-	tx *sql.Tx
-	p coresql.DBWrapper
+	tx   *sql.Tx
+	wrap wrapper.DBWrapper
 }
 
 func (m *mySQLLogStorage) Snapshot(ctx context.Context) (storage.ReadOnlyLogTX, error) {
-	tx, err := m.db.Begin()
+	tx, err := m.wrap.DB().Begin()
 	if err != nil {
 		glog.Warningf("Could not start ReadOnlyLogTX: %s", err)
 		return nil, err
 	}
-	return &readOnlyLogTX{tx:tx, p:m.provider}, nil
+	return &readOnlyLogTX{tx:tx, wrap:m.wrap}, nil
 }
 
 func (t *readOnlyLogTX) Commit() error {
@@ -117,7 +117,7 @@ func (t *readOnlyLogTX) Close() error {
 
 // GetActiveLogIDs returns a list of the IDs of all configured logs
 func (t *readOnlyLogTX) GetActiveLogIDs() ([]int64, error) {
-	stmt, err := t.p.GetActiveLogsStmt(t.tx)
+	stmt, err := t.wrap.GetActiveLogsStmt(t.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (t *readOnlyLogTX) GetActiveLogIDs() ([]int64, error) {
 // GetActiveLogIDsWithPendingWork returns a list of the IDs of all configured logs
 // that have queued unsequenced leaves that need to be integrated
 func (t *readOnlyLogTX) GetActiveLogIDsWithPendingWork() ([]int64, error) {
-	stmt, err := t.p.GetActiveLogsWithWorkStmt(t.tx)
+	stmt, err := t.wrap.GetActiveLogsWithWorkStmt(t.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (t *logTreeTX) WriteRevision() int64 {
 }
 
 func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.LogLeaf, error) {
-	stx, err := t.ls.provider.GetQueuedLeavesStmt(t.tx)
+	stx, err := t.ls.wrap.GetQueuedLeavesStmt(t.tx)
 	if err != nil {
 		glog.Warningf("Failed to prepare dequeue select: %s", err)
 		return nil, err
@@ -275,12 +275,12 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 	existingCount := 0
 	existingLeaves := make([]*trillian.LogLeaf, len(leaves))
 
-	unseqEntryStmt, err := t.ls.provider.InsertUnsequencedEntryStmt(t.tx)
+	unseqEntryStmt, err := t.ls.wrap.InsertUnsequencedEntryStmt(t.tx)
 	if err != nil {
 		return nil, err
 	}
 	defer unseqEntryStmt.Close()
-	unseqLeafStmt, err := t.ls.provider.InsertUnsequencedLeafStmt(t.tx)
+	unseqLeafStmt, err := t.ls.wrap.InsertUnsequencedLeafStmt(t.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 		// if there's ever a hash collision it will do the wrong thing and it also
 		// causes a DELETE / INSERT, which is undesirable.
 		_, err := unseqLeafStmt.Exec(t.treeID, leaf.LeafIdentityHash, leaf.LeafValue, leaf.ExtraData)
-		if t.ls.provider.IsDuplicateErr(err) {
+		if t.ls.wrap.IsDuplicateErr(err) {
 			// Remember the duplicate leaf, using the requested leaf for now.
 			existingLeaves[leafPos.idx] = leaf
 			existingCount++
@@ -365,7 +365,7 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 func (t *logTreeTX) GetSequencedLeafCount() (int64, error) {
 	var sequencedLeafCount int64
 
-	stmt, err := t.ls.provider.GetSequencedLeafCountStmt(t.tx)
+	stmt, err := t.ls.wrap.GetSequencedLeafCountStmt(t.tx)
 	if err != nil {
 		return 0, err
 	}
@@ -380,7 +380,7 @@ func (t *logTreeTX) GetSequencedLeafCount() (int64, error) {
 }
 
 func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]*trillian.LogLeaf, error) {
-	stmt, err := t.ls.provider.GetLeavesByIndexStmt(t.tx, len(leaves))
+	stmt, err := t.ls.wrap.GetLeavesByIndexStmt(t.tx, len(leaves))
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]*trillian.LogLeaf, error
 }
 
 func (t *logTreeTX) GetLeavesByHash(leafHashes [][]byte, orderBySequence bool) ([]*trillian.LogLeaf, error) {
-	stmt, err := t.ls.provider.GetLeavesByMerkleHashStmt(t.tx, len(leafHashes), orderBySequence)
+	stmt, err := t.ls.wrap.GetLeavesByMerkleHashStmt(t.tx, len(leafHashes), orderBySequence)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +431,7 @@ func (t *logTreeTX) GetLeavesByHash(leafHashes [][]byte, orderBySequence bool) (
 // as a slice of LogLeaf objects for convenience.  However, note that the
 // returned LogLeaf objects will not have a valid MerkleLeafHash or LeafIndex.
 func (t *logTreeTX) getLeafDataByIdentityHash(leafHashes [][]byte) ([]*trillian.LogLeaf, error) {
-	stmt, err := t.ls.provider.GetLeavesByLeafIdentityHashStmt(t.tx, len(leafHashes))
+	stmt, err := t.ls.wrap.GetLeavesByLeafIdentityHashStmt(t.tx, len(leafHashes))
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (t *logTreeTX) fetchLatestRoot() (trillian.SignedLogRoot, error) {
 	var rootHash, rootSignatureBytes []byte
 	var rootSignature spb.DigitallySigned
 
-	stmt, err := t.ls.provider.GetLatestSignedLogRootStmt(t.tx)
+	stmt, err := t.ls.wrap.GetLatestSignedLogRootStmt(t.tx)
 	if err != nil {
 		return trillian.SignedLogRoot{}, nil
 	}
@@ -488,7 +488,7 @@ func (t *logTreeTX) StoreSignedLogRoot(root trillian.SignedLogRoot) error {
 		return err
 	}
 
-	stmt, err := t.ls.provider.InsertTreeHeadStmt(t.tx)
+	stmt, err := t.ls.wrap.InsertTreeHeadStmt(t.tx)
 	if err != nil {
 		return err
 	}
@@ -506,7 +506,7 @@ func (t *logTreeTX) StoreSignedLogRoot(root trillian.SignedLogRoot) error {
 func (t *logTreeTX) UpdateSequencedLeaves(leaves []*trillian.LogLeaf) error {
 	// TODO: In theory we can do this with CASE / WHEN in one SQL statement but it's more fiddly
 	// and can be implemented later if necessary
-	stmt, err := t.ls.provider.InsertSequencedLeafStmt(t.tx)
+	stmt, err := t.ls.wrap.InsertSequencedLeafStmt(t.tx)
 	if err != nil {
 		return err
 	}
@@ -534,7 +534,7 @@ func (t *logTreeTX) removeSequencedLeaves(leaves []*trillian.LogLeaf) error {
 	// Delete in order of the hash values in the leaves.
 	sort.Sort(byLeafIdentityHash(leaves))
 
-	stmt, err := t.ls.provider.DeleteUnsequencedStmt(t.tx, len(leaves))
+	stmt, err := t.ls.wrap.DeleteUnsequencedStmt(t.tx, len(leaves))
 	if err != nil {
 		glog.Warningf("Failed to get delete statement for sequenced work: %s", err)
 		return err
@@ -598,7 +598,7 @@ func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, stmt *sql.Stmt,
 
 // GetActiveLogIDs returns a list of the IDs of all configured logs
 func (t *logTreeTX) GetActiveLogIDs() ([]int64, error) {
-	stmt, err := t.ls.provider.GetActiveLogsStmt(t.tx)
+	stmt, err := t.ls.wrap.GetActiveLogsStmt(t.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -609,7 +609,7 @@ func (t *logTreeTX) GetActiveLogIDs() ([]int64, error) {
 // GetActiveLogIDsWithPendingWork returns a list of the IDs of all configured logs
 // that have queued unsequenced leaves that need to be integrated
 func (t *logTreeTX) GetActiveLogIDsWithPendingWork() ([]int64, error) {
-	stmt, err := t.ls.provider.GetActiveLogsWithWorkStmt(t.tx)
+	stmt, err := t.ls.wrap.GetActiveLogsWithWorkStmt(t.tx)
 	if err != nil {
 		return nil, err
 	}

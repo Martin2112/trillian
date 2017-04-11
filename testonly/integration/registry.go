@@ -17,6 +17,7 @@ package integration
 import (
 	"github.com/google/trillian/crypto/keys"
 	"github.com/google/trillian/extension"
+	"github.com/google/trillian/storage/coresql"
 	"github.com/google/trillian/storage/mysql"
 )
 
@@ -27,11 +28,12 @@ func NewRegistryForTests(testID string) (extension.Registry, error) {
 	if err != nil {
 		return extension.Registry{}, err
 	}
+	wrap := mysql.NewWrapper(db)
 
 	return extension.Registry{
-		AdminStorage:  mysql.NewAdminStorage(db),
+		AdminStorage:  coresql.NewAdminStorage(wrap),
 		SignerFactory: keys.PEMSignerFactory{},
-		LogStorage:    mysql.NewLogStorage(db),
-		MapStorage:    mysql.NewMapStorage(db),
+		LogStorage:    coresql.NewLogStorage(wrap),
+		MapStorage:    coresql.NewMapStorage(wrap),
 	}, nil
 }

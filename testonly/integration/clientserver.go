@@ -34,6 +34,7 @@ import (
 	"github.com/google/trillian/testonly"
 	"github.com/google/trillian/util"
 	"google.golang.org/grpc"
+	"github.com/google/trillian/storage/coresql"
 )
 
 var (
@@ -89,9 +90,9 @@ func NewLogEnv(ctx context.Context, numSequencers int, testID string) (*LogEnv, 
 	}
 
 	registry := extension.Registry{
-		AdminStorage:  mysql.NewAdminStorage(db),
+		AdminStorage:  coresql.NewAdminStorage(mysql.NewWrapper(db)),
 		SignerFactory: keys.PEMSignerFactory{},
-		LogStorage:    mysql.NewLogStorage(db),
+		LogStorage:    coresql.NewLogStorage(mysql.NewWrapper(db)),
 	}
 
 	// Create Log Server.
