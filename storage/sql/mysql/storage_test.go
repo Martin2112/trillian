@@ -15,7 +15,6 @@
 package mysql
 
 import (
-	"context"
 	"crypto"
 	"crypto/sha256"
 	"database/sql"
@@ -25,19 +24,17 @@ import (
 	"testing"
 
 	"github.com/golang/glog"
-	"github.com/google/trillian"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/merkle/rfc6962"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/sql/coresql"
 	"github.com/google/trillian/storage/sql/coresql/testonly"
-	storageto "github.com/google/trillian/storage/testonly"
 	"github.com/google/trillian/storage/sql/coresql/wrapper"
 )
 
 func TestNodeRoundTrip(t *testing.T) {
 	cleanTestDB(dbWrapper)
-	logID := createLogForTests(dbWrapper)
+	logID := testonly.CreateLogForTest(dbWrapper)
 	s := coresql.NewLogStorage(dbWrapper)
 
 	var writeRevision int64
@@ -83,7 +80,7 @@ func TestNodeRoundTrip(t *testing.T) {
 // cache gets exercised. Any tree size > 256 will do this.
 func TestLogNodeRoundTripMultiSubtree(t *testing.T) {
 	cleanTestDB(dbWrapper)
-	logID := createLogForTests(dbWrapper)
+	logID := testonly.CreateLogForTest(dbWrapper)
 	s := coresql.NewLogStorage(dbWrapper)
 
 	var writeRevision int64
@@ -191,62 +188,6 @@ func cleanTestDB(wrapper wrapper.DBWrapper) {
 			panic(fmt.Errorf("Failed to delete rows in %s: %s", table, err))
 		}
 	}
-}
-
-// createMapForTests creates a map-type tree for tests. Returns the treeID of the new tree.
-func createMapForTests(wrapper wrapper.DBWrapper) int64 {
-	tree, err := createTree(wrapper, storageto.MapTree)
-	if err != nil {
-		panic(fmt.Sprintf("Error creating map: %v", err))
-	}
-	return tree.TreeId
-}
-
-// createLogForTests creates a log-type tree for tests. Returns the treeID of the new tree.
-func createLogForTests(wrapper wrapper.DBWrapper) int64 {
-	tree, err := createTree(wrapper, storageto.LogTree)
-	if err != nil {
-		panic(fmt.Sprintf("Error creating log: %v", err))
-	}
-	return tree.TreeId
-}
-
-// createTree creates the specified tree using AdminStorage.
-func createTree(wrapper wrapper.DBWrapper, tree *trillian.Tree) (*trillian.Tree, error) {
-	s := coresql.NewAdminStorage(wrapper)
-	ctx := context.Background()
-	tx, err := s.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Close()
-	newTree, err := tx.CreateTree(ctx, tree)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return newTree, nil
-}
-
-// updateTree updates the specified tree using AdminStorage.
-func updateTree(wrapper wrapper.DBWrapper, treeID int64, updateFn func(*trillian.Tree)) (*trillian.Tree, error) {
-	s := coresql.NewAdminStorage(wrapper)
-	ctx := context.Background()
-	tx, err := s.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Close()
-	tree, err := tx.UpdateTree(ctx, treeID, updateFn)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return tree, nil
 }
 
 func OpenDB(dbURL string) (*sql.DB, error) {
