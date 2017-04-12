@@ -48,7 +48,7 @@ type sqlLogStorage struct {
 	admin storage.AdminStorage
 }
 
-// NewLogStorage creates a mySQLLogStorage instance for the specified MySQL URL.
+// NewLogStorage creates a sqlLogStorage instance using the supplied database wrapper.
 // It assumes storage.AdminStorage is backed by the same MySQL database as well.
 func NewLogStorage(wrapper wrapper.DBWrapper) storage.LogStorage {
 	return &sqlLogStorage{

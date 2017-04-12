@@ -35,7 +35,7 @@ type sqlMapStorage struct {
 	admin storage.AdminStorage
 }
 
-// NewMapStorage creates a mySQLMapStorage instance for the specified MySQL URL.
+// NewMapStorage creates a sqlMapStorage instance for the specified database wrapper.
 // It assumes storage.AdminStorage is backed by the same MySQL database as well.
 func NewMapStorage(wrap wrapper.DBWrapper) storage.MapStorage {
 	return &sqlMapStorage{

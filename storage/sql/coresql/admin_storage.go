@@ -34,12 +34,12 @@ const (
 	defaultSequenceIntervalSeconds = 60
 )
 
-// NewAdminStorage returns a MySQL storage.AdminStorage implementation backed by DB.
+// NewAdminStorage returns a SQL storage.AdminStorage implementation backed by DB.
 func NewAdminStorage(wrapper wrapper.DBWrapper) storage.AdminStorage {
 	return &sqlAdminStorage{wrap: wrapper}
 }
 
-// mysqlAdminStorage implements storage.AdminStorage
+// sqlAdminStorage implements storage.AdminStorage
 type sqlAdminStorage struct {
 	wrap wrapper.DBWrapper
 }

@@ -27,8 +27,8 @@ import (
 	"github.com/google/trillian/storage/sql/coresql/wrapper"
 )
 
-// mySQLTreeStorage is shared between the mySQLLog- and (forthcoming) mySQLMap-
-// Storage implementations, and contains functionality which is common to both,
+// sqlTreeStorage is shared between the log and map storage implementations, and contains
+// functionality which is common to both,
 type sqlTreeStorage struct {
 	wrap wrapper.DBWrapper
 }
