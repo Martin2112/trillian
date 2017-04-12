@@ -307,6 +307,17 @@ func (_mr *_MockLogTreeTXRecorder) GetActiveLogIDsWithPendingWork() *gomock.Call
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetActiveLogIDsWithPendingWork")
 }
 
+func (_m *MockLogTreeTX) GetLeafDataByIdentityHash(_param0 [][]byte) ([]*trillian.LogLeaf, error) {
+	ret := _m.ctrl.Call(_m, "GetLeafDataByIdentityHash", _param0)
+	ret0, _ := ret[0].([]*trillian.LogLeaf)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockLogTreeTXRecorder) GetLeafDataByIdentityHash(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetLeafDataByIdentityHash", arg0)
+}
+
 func (_m *MockLogTreeTX) GetLeavesByHash(_param0 [][]byte, _param1 bool) ([]*trillian.LogLeaf, error) {
 	ret := _m.ctrl.Call(_m, "GetLeavesByHash", _param0, _param1)
 	ret0, _ := ret[0].([]*trillian.LogLeaf)
@@ -857,6 +868,17 @@ func (_m *MockReadOnlyLogTreeTX) Commit() error {
 
 func (_mr *_MockReadOnlyLogTreeTXRecorder) Commit() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Commit")
+}
+
+func (_m *MockReadOnlyLogTreeTX) GetLeafDataByIdentityHash(_param0 [][]byte) ([]*trillian.LogLeaf, error) {
+	ret := _m.ctrl.Call(_m, "GetLeafDataByIdentityHash", _param0)
+	ret0, _ := ret[0].([]*trillian.LogLeaf)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockReadOnlyLogTreeTXRecorder) GetLeafDataByIdentityHash(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetLeafDataByIdentityHash", arg0)
 }
 
 func (_m *MockReadOnlyLogTreeTX) GetLeavesByHash(_param0 [][]byte, _param1 bool) ([]*trillian.LogLeaf, error) {
