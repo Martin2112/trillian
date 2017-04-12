@@ -30,15 +30,15 @@ const selectTreeControlByID = "SELECT SigningEnabled, SequencingEnabled, Sequenc
 
 func TestMysqlAdminStorage(t *testing.T) {
 	tester := &testonly.AdminStorageTester{NewAdminStorage: func() storage.AdminStorage {
-		cleanTestDB(DB)
-		return coresql.NewAdminStorage(NewWrapper(DB))
+		cleanTestDB(dbWrapper)
+		return coresql.NewAdminStorage(dbWrapper)
 	}}
 	tester.RunAllTests(t)
 }
 
 func TestAdminTX_CreateTree_InitializesStorageStructures(t *testing.T) {
-	cleanTestDB(DB)
-	s := coresql.NewAdminStorage(NewWrapper(DB))
+	cleanTestDB(dbWrapper)
+	s := coresql.NewAdminStorage(dbWrapper)
 	ctx := context.Background()
 
 	tree, err := createTreeInternal(ctx, s, testonly.LogTree)
@@ -49,7 +49,7 @@ func TestAdminTX_CreateTree_InitializesStorageStructures(t *testing.T) {
 	// Check if TreeControl is correctly written.
 	var signingEnabled, sequencingEnabled bool
 	var sequenceIntervalSeconds int
-	if err := DB.QueryRow(selectTreeControlByID, tree.TreeId).Scan(&signingEnabled, &sequencingEnabled, &sequenceIntervalSeconds); err != nil {
+	if err := dbWrapper.DB().QueryRow(selectTreeControlByID, tree.TreeId).Scan(&signingEnabled, &sequencingEnabled, &sequenceIntervalSeconds); err != nil {
 		t.Fatalf("Failed to read TreeControl: %v", err)
 	}
 	// We don't mind about specific values, defaults change, but let's check
@@ -60,8 +60,8 @@ func TestAdminTX_CreateTree_InitializesStorageStructures(t *testing.T) {
 }
 
 func TestAdminTX_TreeWithNulls(t *testing.T) {
-	cleanTestDB(DB)
-	s := coresql.NewAdminStorage(NewWrapper(DB))
+	cleanTestDB(dbWrapper)
+	s := coresql.NewAdminStorage(dbWrapper)
 	ctx := context.Background()
 
 	// Setup: create a tree and set all nullable columns to null.
@@ -71,7 +71,7 @@ func TestAdminTX_TreeWithNulls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createTree() failed: %v", err)
 	}
-	if err := setNulls(DB, tree.TreeId); err != nil {
+	if err := setNulls(dbWrapper.DB(), tree.TreeId); err != nil {
 		t.Fatalf("setNulls() = %v, want = nil", err)
 	}
 
