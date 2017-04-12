@@ -29,7 +29,7 @@ import (
 	"github.com/google/trillian"
 	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/storage"
-	"github.com/google/trillian/storage/coresql"
+	"github.com/google/trillian/storage/sql/coresql"
 )
 
 var allTables = []string{"Unsequenced", "TreeHead", "SequencedLeafData", "LeafData", "Subtree", "TreeControl", "Trees", "MapLeaf", "MapHead"}

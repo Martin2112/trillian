@@ -27,7 +27,7 @@ import (
 	"github.com/google/trillian"
 	spb "github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/storage"
-	"github.com/google/trillian/storage/wrapper"
+	"github.com/google/trillian/storage/sql/coresql/wrapper"
 )
 
 const (
