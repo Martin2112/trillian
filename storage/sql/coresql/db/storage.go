@@ -21,6 +21,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/google/trillian/storage/sql/coresql/wrapper"
 	"github.com/google/trillian/storage/sql/mysql"
+	"github.com/google/trillian/storage/sql/pgsql"
 )
 
 // OpenDB opens, and creates a wrapper for, the SQL databases that we know about. The wrapper
@@ -37,12 +38,20 @@ func OpenDB(driver, dbURL string) (wrapper.DBWrapper, error) {
 	switch driver {
 	case "mysql":
 		wrapper := mysql.NewWrapper(db)
-		if err := wrapper.OnOpenDB(); err != nil {
-			return nil, err
-		}
-		return wrapper, nil
+		return openHook(wrapper)
+	case "pgsql":
+		wrapper := pgsql.NewWrapper(db)
+		return openHook(wrapper)
 
 	default:
 		return nil, fmt.Errorf("unknown database driver: '%s' cannot be used", driver)
 	}
+}
+
+func openHook(wrapper wrapper.DBWrapper) (wrapper.DBWrapper, error) {
+	// Let the wrapper do any necessary initialization
+	if err := wrapper.OnOpenDB(); err != nil {
+		return nil, err
+	}
+	return wrapper, nil
 }
