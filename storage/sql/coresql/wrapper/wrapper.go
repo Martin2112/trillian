@@ -34,7 +34,7 @@ type TreeStatementProvider interface {
 type LogStatementProvider interface {
 	GetActiveLogsStmt(tx *sql.Tx) (*sql.Stmt, error)
 	GetActiveLogsWithWorkStmt(tx *sql.Tx) (*sql.Stmt, error)
-	DeleteUnsequencedStmt(tx *sql.Tx, num int) (*sql.Stmt, error)
+	DeleteUnsequencedStmt(tx *sql.Tx) (*sql.Stmt, error)
 	GetLeavesByIndexStmt(tx *sql.Tx, num int) (*sql.Stmt, error)
 	GetLeavesByMerkleHashStmt(tx *sql.Tx, num int, orderBySequence bool) (*sql.Stmt, error)
 	GetLeavesByLeafIdentityHashStmt(tx *sql.Tx, num int) (*sql.Stmt, error)

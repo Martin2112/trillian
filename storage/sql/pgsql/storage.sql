@@ -114,10 +114,8 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
   MessageId            BYTEA CHECK (MessageId IS NOT NULL And length(MessageId) <= 32),
   Payload              BYTEA CHECK (Payload is NOT NULL),
   QueueTimestampNanos  BIGINT NOT NULL,
-  PRIMARY KEY (TreeId, LeafIdentityHash, MessageId)
+  PRIMARY KEY (TreeId, MessageId, QueueTimestampNanos, LeafIdentityHash)
 );
-
-CREATE INDEX QueueTimeIdx ON Unsequenced(QueueTimestampNanos);
 
 -- ---------------------------------------------
 -- Map specific stuff here

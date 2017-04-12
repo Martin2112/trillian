@@ -76,12 +76,12 @@ const (
 	selectLeavesByLeafIdentityHashSQL = `SELECT '` + dummyMerkleLeafHash + `',l.LeafIdentityHash,l.LeafValue,-1,l.ExtraData
 			FROM LeafData l
 			WHERE l.LeafIdentityHash IN (` + placeholderSQL + `) AND l.TreeId = ?`
-	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash
+	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash,MessageId,QueueTimestampNanos
 			FROM Unsequenced
 			WHERE TreeID=?
 			AND QueueTimestampNanos<=?
 			ORDER BY QueueTimestampNanos,LeafIdentityHash ASC LIMIT ?`
-	deleteUnsequencedSQL         = "DELETE FROM Unsequenced WHERE LeafIdentityHash IN (<placeholder>) AND TreeId = ?"
+	deleteUnsequencedSQL         = "DELETE FROM Unsequenced WHERE TreeId=? AND MessageId=? AND QueueTimestampNanos=? AND LeafIdentityHash=?"
 	selectLatestSignedLogRootSQL = `SELECT TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature
 			FROM TreeHead WHERE TreeId=?
 			ORDER BY TreeHeadTimestamp DESC LIMIT 1`
@@ -229,10 +229,8 @@ func (m *mySQLWrapper) GetLeavesByLeafIdentityHashStmt(tx *sql.Tx, num int) (*sq
 	})
 }
 
-func (m *mySQLWrapper) DeleteUnsequencedStmt(tx *sql.Tx, num int) (*sql.Stmt, error) {
-	return wrapper.PrepInTx(tx, func() (stmt *sql.Stmt, err error) {
-		return m.getStmt(deleteUnsequencedSQL, num, "?", "?")
-	})
+func (m *mySQLWrapper) DeleteUnsequencedStmt(tx *sql.Tx) (*sql.Stmt, error) {
+	return tx.Prepare(deleteUnsequencedSQL)
 }
 
 func (m *mySQLWrapper) GetLeavesByMerkleHashStmt(tx *sql.Tx, num int, orderBySequence bool) (*sql.Stmt, error) {

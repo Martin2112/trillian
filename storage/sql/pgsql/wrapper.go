@@ -76,12 +76,12 @@ const (
 	selectLeavesByLeafIdentityHashSQL = `SELECT '` + dummyMerkleLeafHash + `',l.LeafIdentityHash,l.LeafValue,-1,l.ExtraData
 			FROM LeafData l
 			WHERE l.LeafIdentityHash IN (` + placeholderSQL + `) AND l.TreeId = $1`
-	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash,Payload
+	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash,MessageId,QueueTimestampNanos
 			FROM Unsequenced
 			WHERE TreeID=$1
 			AND QueueTimestampNanos<=$2
 			ORDER BY QueueTimestampNanos,LeafIdentityHash ASC LIMIT $3`
-	deleteUnsequencedSQL         = "DELETE FROM Unsequenced WHERE LeafIdentityHash IN (<placeholder>) AND TreeId = $1"
+	deleteUnsequencedSQL         = "DELETE FROM Unsequenced WHERE TreeId=$1 AND MessageId=$2 AND QueueTimestampNanos=$3 AND LeafIdentityHash=$4"
 	selectLatestSignedLogRootSQL = `SELECT TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature
 			FROM TreeHead WHERE TreeId=$1
 			ORDER BY TreeHeadTimestamp DESC LIMIT 1`
@@ -231,10 +231,8 @@ func (m *pgSQLWrapper) GetLeavesByLeafIdentityHashStmt(tx *sql.Tx, num int) (*sq
 	})
 }
 
-func (m *pgSQLWrapper) DeleteUnsequencedStmt(tx *sql.Tx, num int) (*sql.Stmt, error) {
-	return wrapper.PrepInTx(tx, func() (stmt *sql.Stmt, err error) {
-		return m.getStmt(deleteUnsequencedSQL, 2, num)
-	})
+func (m *pgSQLWrapper) DeleteUnsequencedStmt(tx *sql.Tx) (*sql.Stmt, error) {
+	return tx.Prepare(deleteUnsequencedSQL)
 }
 
 func (m *pgSQLWrapper) GetLeavesByMerkleHashStmt(tx *sql.Tx, num int, orderBySequence bool) (*sql.Stmt, error) {

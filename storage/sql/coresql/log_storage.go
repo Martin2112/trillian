@@ -196,6 +196,14 @@ func (t *logTreeTX) WriteRevision() int64 {
 	return t.treeTX.writeRevision
 }
 
+// dequeuedLeaf is used internally and contains some data that is not exposed to the client
+type dequeuedLeaf struct {
+	messageID           []byte
+	queueTimestampNanos int64
+	merkleLeafHash      []byte
+	leafIdentityHash  []byte
+}
+
 func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.LogLeaf, error) {
 	stx, err := t.ls.wrap.GetQueuedLeavesStmt(t.tx)
 	if err != nil {
@@ -205,6 +213,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	defer stx.Close()
 
 	leaves := make([]*trillian.LogLeaf, 0, limit)
+	dql := make([]dequeuedLeaf, 0, limit)
 	rows, err := stx.Query(t.treeID, cutoffTime.UnixNano(), limit)
 
 	if err != nil {
@@ -217,8 +226,10 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	for rows.Next() {
 		var leafIDHash []byte
 		var merkleHash []byte
+		var messageID []byte
+		var queueNanos int64
 
-		err := rows.Scan(&leafIDHash, &merkleHash)
+		err := rows.Scan(&leafIDHash, &merkleHash, &messageID, &queueNanos)
 
 		if err != nil {
 			glog.Warningf("Error scanning work rows: %s", err)
@@ -237,6 +248,12 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 			MerkleLeafHash:   merkleHash,
 		}
 		leaves = append(leaves, leaf)
+		dql = append(dql, dequeuedLeaf{
+			messageID:messageID,
+			queueTimestampNanos:queueNanos,
+			merkleLeafHash:merkleHash,
+			leafIdentityHash:leafIDHash,
+		})
 	}
 
 	if rows.Err() != nil {
@@ -246,7 +263,7 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 	// The convention is that if leaf processing succeeds (by committing this tx)
 	// then the unsequenced entries for them are removed
 	if len(leaves) > 0 {
-		err = t.removeSequencedLeaves(leaves)
+		err = t.removeSequencedLeaves(dql)
 	}
 
 	if err != nil {
@@ -530,32 +547,23 @@ func (t *logTreeTX) UpdateSequencedLeaves(leaves []*trillian.LogLeaf) error {
 
 // removeSequencedLeaves removes the passed in leaves slice (which may be
 // modified as part of the operation).
-func (t *logTreeTX) removeSequencedLeaves(leaves []*trillian.LogLeaf) error {
+func (t *logTreeTX) removeSequencedLeaves(leaves []dequeuedLeaf) error {
 	// Delete in order of the hash values in the leaves.
-	sort.Sort(byLeafIdentityHash(leaves))
+	sort.Sort(byDQLeafIdentityHash(leaves))
 
-	stmt, err := t.ls.wrap.DeleteUnsequencedStmt(t.tx, len(leaves))
+	stmt, err := t.ls.wrap.DeleteUnsequencedStmt(t.tx)
 	if err != nil {
 		glog.Warningf("Failed to get delete statement for sequenced work: %s", err)
 		return err
 	}
 	defer stmt.Close()
-	var args []interface{}
-	for _, leaf := range leaves {
-		args = append(args, interface{}(leaf.LeafIdentityHash))
-	}
-	args = append(args, interface{}(t.treeID))
-	result, err := stmt.Exec(args...)
 
-	if err != nil {
-		// Error is handled by checkResultOkAndRowCountIs() below
-		glog.Warningf("Failed to delete sequenced work: %s", err)
-	}
-
-	err = checkResultOkAndRowCountIs(result, err, int64(len(leaves)))
-
-	if err != nil {
-		return err
+	for _, dql := range leaves {
+		result, err := stmt.Exec(t.treeID, dql.messageID, dql.queueTimestampNanos, dql.leafIdentityHash)
+		err = checkResultOkAndRowCountIs(result, err, int64(1))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -629,6 +637,18 @@ func (l byLeafIdentityHash) Swap(i, j int) {
 }
 func (l byLeafIdentityHash) Less(i, j int) bool {
 	return bytes.Compare(l[i].LeafIdentityHash, l[j].LeafIdentityHash) == -1
+}
+
+type byDQLeafIdentityHash []dequeuedLeaf
+
+func (l byDQLeafIdentityHash) Len() int {
+	return len(l)
+}
+func (l byDQLeafIdentityHash) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
+func (l byDQLeafIdentityHash) Less(i, j int) bool {
+	return bytes.Compare(l[i].leafIdentityHash, l[j].leafIdentityHash) == -1
 }
 
 // leafAndPosition records original position before sort.
