@@ -384,6 +384,8 @@ func (m *pgSQLWrapper) getStmt(statement string, first, num int) (*sql.Stmt, err
 		return nil, err
 	}
 
+	glog.Warningf("SQL: %s", s)
+
 	m.statements[statement][num] = s
 
 	return s, nil
@@ -420,4 +422,11 @@ func (m *pgSQLWrapper) CheckDatabaseAccessible(ctx context.Context) error {
 
 	_, err = stmt.Exec()
 	return err
+}
+
+func (m *pgSQLWrapper) VariableArgsFirst() bool {
+	// We want the variable arguments last as we have positional placeholders. This means we
+	// want to keep the fixed parameters as $1, $2 etc. as they otherwise can't be written as
+	// literal strings - they'd change depending on the number of variable args.
+	return false
 }

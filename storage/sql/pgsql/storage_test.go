@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mysql
+package pgsql
+
+// TODO(Martin2112): Work out a clean way of sharing the common parts of tests.
+// Currently these are based on a copy of the mysql tests and as they directly access the
+// database are not portable between SQL dialects.
 
 import (
 	"crypto"
@@ -176,7 +180,7 @@ func createLogNodesForTreeAtSize(ts, rev int64) ([]storage.Node, error) {
 }
 
 func openTestDBOrDie() *sql.DB {
-	db, err := OpenDB("test:zaphod@tcp(127.0.0.1:3306)/test")
+	db, err := OpenDB("postgres://test:zaphod@localhost/test?sslmode=disable")
 	if err != nil {
 		panic(err)
 	}
@@ -193,7 +197,7 @@ func cleanTestDB(wrapper wrapper.DBWrapper) {
 }
 
 func OpenDB(dbURL string) (*sql.DB, error) {
-	return sql.Open("mysql", dbURL)
+	return sql.Open("postgres", dbURL)
 }
 
 // DB is the database used for tests. It's initialized and closed by TestMain().

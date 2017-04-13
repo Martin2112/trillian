@@ -33,8 +33,6 @@ import (
 	"github.com/google/trillian/storage/sql/coresql/testonly"
 )
 
-var allTables = []string{"Unsequenced", "TreeHead", "SequencedLeafData", "LeafData", "Subtree", "TreeControl", "Trees", "MapLeaf", "MapHead"}
-
 // Must be 32 bytes to match sha256 length if it was a real hash
 var dummyHash = []byte("hashxxxxhashxxxxhashxxxxhashxxxx")
 var dummyRawHash = []byte("xxxxhashxxxxhashxxxxhashxxxxhash")

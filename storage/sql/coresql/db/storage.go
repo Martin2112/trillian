@@ -39,7 +39,7 @@ func OpenDB(driver, dbURL string) (wrapper.DBWrapper, error) {
 	case "mysql":
 		wrapper := mysql.NewWrapper(db)
 		return openHook(wrapper)
-	case "pgsql":
+	case "postgres":
 		wrapper := pgsql.NewWrapper(db)
 		return openHook(wrapper)
 

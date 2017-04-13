@@ -7,20 +7,24 @@
 -- Tree parameters should not be changed after creation. Doing so can
 -- render the data in the tree unusable or inconsistent.
 CREATE TABLE IF NOT EXISTS Trees(
-  TreeId                INTEGER NOT NULL,
-  KeyId                 BYTEA CHECK (KeyId IS NOT NULL AND length(KeyId) <= 255),
+  TreeId                BIGINT NOT NULL,
+  TreeState             VARCHAR CHECK (TreeState = 'ACTIVE' OR TreeState = 'FROZEN' OR TreeState = 'SOFT_DELETED' OR TreeState = 'HARD_DELETED') NOT NULL,
   TreeType              VARCHAR CHECK (TreeType = 'LOG' OR TreeType = 'MAP')  NOT NULL,
-  LeafHasherType        VARCHAR CHECK (LeafHasherType = 'SHA256') NOT NULL,
-  TreeHasherType        VARCHAR CHECK (TreeHasherType = 'SHA256') NOT NULL,
-  AllowsDuplicateLeaves BOOLEAN NOT NULL DEFAULT false,
+  HashStrategy          VARCHAR CHECK (HashStrategy = 'RFC_6962') NOT NULL,
+  HashAlgorithm         VARCHAR CHECK (HashAlgorithm = 'SHA256') NOT NULL,
+  SignatureAlgorithm    VARCHAR CHECK (SignatureAlgorithm = 'ECDSA' OR SignatureAlgorithm = 'RSA') NOT NULL,
+  DisplayName           VARCHAR,
+  Description           VARCHAR,
+  CreateTimeMillis      BIGINT NOT NULL,
+  UpdateTimeMillis      BIGINT NOT NULL,
+  PrivateKey            BYTEA NOT NULL,
   PRIMARY KEY(TreeId)
 );
 
 -- This table contains tree parameters that can be changed at runtime such as for
 -- administrative purposes.
 CREATE TABLE IF NOT EXISTS TreeControl(
-  TreeId                  INTEGER NOT NULL,
-  ReadOnlyRequests        BOOLEAN,
+  TreeId                  BIGINT NOT NULL,
   SigningEnabled          BOOLEAN,
   SequencingEnabled       BOOLEAN,
   SequenceIntervalSeconds INTEGER,
@@ -30,7 +34,7 @@ CREATE TABLE IF NOT EXISTS TreeControl(
 );
 
 CREATE TABLE IF NOT EXISTS Subtree(
-  TreeId               INTEGER NOT NULL,
+  TreeId               BIGINT NOT NULL,
   SubtreeId            BYTEA CHECK (SubtreeId IS NOT NULL And length(SubtreeId) <= 255),
   Nodes                BYTEA CHECK (Nodes IS NOT NULL And length(Nodes) <= 32768),
   SubtreeRevision      INTEGER NOT NULL,  -- negated because DESC indexes aren't supported :/
@@ -41,7 +45,7 @@ CREATE TABLE IF NOT EXISTS Subtree(
 -- The TreeRevisionIdx is used to enforce that there is only one STH at any
 -- tree revision
 CREATE TABLE IF NOT EXISTS TreeHead(
-  TreeId               INTEGER NOT NULL,
+  TreeId               BIGINT NOT NULL,
   TreeHeadTimestamp    BIGINT,
   TreeSize             BIGINT,
   RootHash             BYTEA CHECK (RootHash IS NOT NULL And length(RootHash) <= 255),
@@ -64,7 +68,7 @@ CREATE TABLE IF NOT EXISTS TreeHead(
 -- A leaf that has not been sequenced has a row in this table. If duplicate leaves
 -- are allowed they will all reference this row.
 CREATE TABLE IF NOT EXISTS LeafData(
-  TreeId               INTEGER NOT NULL,
+  TreeId               BIGINT NOT NULL,
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit and
   -- for deduping. It is not the leaf hash output of the treehasher used by the log.
   LeafIdentityHash     BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
@@ -87,7 +91,7 @@ CREATE INDEX LeafHashIdx ON LeafData(LeafIdentityHash);
 -- which is not available at the time we queue the entry. We need both hashes because the
 -- LeafData table is keyed by the raw data hash.
 CREATE TABLE IF NOT EXISTS SequencedLeafData(
-  TreeId               INTEGER NOT NULL,
+  TreeId               BIGINT NOT NULL,
   SequenceNumber       BIGINT NOT NULL CHECK(SequenceNumber >= 0),
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit.
   -- It is not the leaf hash output of the treehasher used by the log.
@@ -101,7 +105,7 @@ CREATE TABLE IF NOT EXISTS SequencedLeafData(
 );
 
 CREATE TABLE IF NOT EXISTS Unsequenced(
-  TreeId               INTEGER NOT NULL,
+  TreeId               BIGINT NOT NULL,
   -- Note that this is a simple SHA256 hash of the raw data used to detect corruption in transit.
   -- It is not the leaf hash output of the treehasher used by the log.
   LeafIdentityHash     BYTEA CHECK (LeafIdentityHash IS NOT NULL And length(LeafIdentityHash) <= 255),
@@ -122,7 +126,7 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
 -- ---------------------------------------------
 
 CREATE TABLE IF NOT EXISTS MapLeaf(
-  TreeId                INTEGER NOT NULL,
+  TreeId                BIGINT NOT NULL,
   KeyHash               BYTEA CHECK (KeyHash IS NOT NULL And length(KeyHash) <= 255),
   -- MapRevision is stored negated to invert ordering in the primary key index
   -- st. more recent revisions come first.
@@ -134,7 +138,7 @@ CREATE TABLE IF NOT EXISTS MapLeaf(
 
 
 CREATE TABLE IF NOT EXISTS MapHead(
-  TreeId               INTEGER NOT NULL,
+  TreeId               BIGINT NOT NULL,
   MapHeadTimestamp     BIGINT,
   RootHash             BYTEA CHECK (RootHash IS NOT NULL And length(RootHash) <= 255),
   MapRevision          BIGINT,
@@ -164,4 +168,3 @@ BEGIN
     END IF;
 END
 $$ LANGUAGE 'plpgsql';
-Contact GitHub API Training Shop Blog About
