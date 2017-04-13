@@ -276,7 +276,7 @@ func TestQueueDuplicateLeaf(t *testing.T) {
 				got := existing[i]
 				if want == nil {
 					if got != nil {
-						t.Errorf("QueueLeaves()[%d]=%v @d; want nil", i, ti, got)
+						t.Errorf("QueueLeaves()[%d]=%v @%d; want nil", i, ti, got)
 					}
 					continue
 				}

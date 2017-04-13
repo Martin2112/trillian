@@ -203,7 +203,7 @@ type dequeuedLeaf struct {
 	messageID           []byte
 	queueTimestampNanos int64
 	merkleLeafHash      []byte
-	leafIdentityHash  []byte
+	leafIdentityHash    []byte
 }
 
 func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.LogLeaf, error) {
@@ -251,10 +251,10 @@ func (t *logTreeTX) DequeueLeaves(limit int, cutoffTime time.Time) ([]*trillian.
 		}
 		leaves = append(leaves, leaf)
 		dql = append(dql, dequeuedLeaf{
-			messageID:messageID,
-			queueTimestampNanos:queueNanos,
-			merkleLeafHash:merkleHash,
-			leafIdentityHash:leafIDHash,
+			messageID:           messageID,
+			queueTimestampNanos: queueNanos,
+			merkleLeafHash:      merkleHash,
+			leafIdentityHash:    leafIDHash,
 		})
 	}
 
