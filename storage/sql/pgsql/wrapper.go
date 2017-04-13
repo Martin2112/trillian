@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"strconv"
 	"sync"
 
 	"github.com/golang/glog"
@@ -87,8 +88,15 @@ const (
 			ORDER BY TreeHeadTimestamp DESC LIMIT 1`
 	insertUnsequencedEntrySQL = `INSERT INTO Unsequenced(TreeId,LeafIdentityHash,MerkleLeafHash,MessageId,QueueTimestampNanos)
 			VALUES($1,$2,$3,$4,$5)`
-	insertUnsequencedLeafSQL = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
-			VALUES($1,$2,$3,$4)`
+	// For versions prior to 9.5 there is no ON CONFLICT support so we use a stored procedure to
+	// simulate it.
+	insertUnsequencedLeafSQL = `SELECT upsert_leafdata($1,$2,$3,$4)`
+	// For versions 9.5+ we can use ON CONFLICT directly. They statements have the same parameters
+	// so the code is the same.
+	insertUnsequencedLeafSQL95 = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
+			VALUES($1,$2,$3,$4)
+			ON CONFLICT(TreeID,LeafIdentityHash)
+			DO UPDATE SET LeafIdentityHash=$2`
 	insertSequencedLeafSQL = `INSERT INTO SequencedLeafData(TreeId,LeafIdentityHash,MerkleLeafHash,SequenceNumber)
 			VALUES($1,$2,$3,$4)`
 	selectSequencedLeafCountSQL = "SELECT COUNT(*) FROM SequencedLeafData WHERE TreeId=$1"
@@ -175,6 +183,8 @@ type pgSQLWrapper struct {
 	// in the query to the statement that should be used.
 	statementMutex sync.Mutex
 	statements     map[string]map[int]*sql.Stmt
+	// serverIs95 indicates whether we use postgres 9.5 featurees or not
+	serverIs95     bool
 }
 
 // NewWrapper creates and returns a DBWrapper appropriate for use with MySQL.
@@ -260,6 +270,11 @@ func (m *pgSQLWrapper) InsertUnsequencedEntryStmt(tx *sql.Tx) (*sql.Stmt, error)
 }
 
 func (m *pgSQLWrapper) InsertUnsequencedLeafStmt(tx *sql.Tx) (*sql.Stmt, error) {
+	// Switch between stored procedure and direct insert depending on if the server is
+	// 9.5 or later.
+	if m.serverIs95 {
+		return tx.Prepare(insertUnsequencedLeafSQL95)
+	}
 	return tx.Prepare(insertUnsequencedLeafSQL)
 }
 
@@ -401,6 +416,22 @@ func (m *pgSQLWrapper) IsDuplicateErr(err error) bool {
 }
 
 func (m *pgSQLWrapper) OnOpenDB() error {
+	// Try to get the server version and see if it's at least 9.5 to enable those features. If
+	// we can't tell we'll assume it's an old version and continue.
+	var version string
+	if err := m.db.QueryRow("SHOW server_version").Scan(&version); err == nil {
+		v := strings.SplitN(version, ".", 3)
+		major, err := strconv.ParseInt(v[0], 10, 32)
+		minor, err2 := strconv.ParseInt(v[1], 10, 32)
+
+		if err == nil && err2 == nil {
+			if major > 9 || (major == 9 && minor >= 5) {
+				m.serverIs95 = true
+				glog.V(1).Info("9.5+ server - ON CONFLICT enabled")
+			}
+		}
+	}
+
 	return nil
 }
 
