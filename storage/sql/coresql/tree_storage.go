@@ -94,6 +94,12 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 
 	args := make([]interface{}, 0, len(nodeIDs)+3)
 
+	if !t.ts.wrap.VariableArgsFirst() {
+		args = append(args, interface{}(t.treeID))
+		args = append(args, interface{}(treeRevision))
+		args = append(args, interface{}(t.treeID))
+	}
+
 	// populate args with nodeIDs
 	for _, nodeID := range nodeIDs {
 		if nodeID.PrefixLenBits%8 != 0 {
@@ -105,9 +111,11 @@ func (t *treeTX) getSubtrees(treeRevision int64, nodeIDs []storage.NodeID) ([]*s
 		args = append(args, interface{}(nodeIDBytes))
 	}
 
-	args = append(args, interface{}(t.treeID))
-	args = append(args, interface{}(treeRevision))
-	args = append(args, interface{}(t.treeID))
+	if t.ts.wrap.VariableArgsFirst() {
+		args = append(args, interface{}(t.treeID))
+		args = append(args, interface{}(treeRevision))
+		args = append(args, interface{}(t.treeID))
+	}
 
 	rows, err := stmt.Query(args...)
 	if err != nil {
