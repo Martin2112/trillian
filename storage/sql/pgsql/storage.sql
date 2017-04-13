@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS Subtree(
   TreeId               BIGINT NOT NULL,
   SubtreeId            BYTEA CHECK (SubtreeId IS NOT NULL And length(SubtreeId) <= 255),
   Nodes                BYTEA CHECK (Nodes IS NOT NULL And length(Nodes) <= 32768),
-  SubtreeRevision      INTEGER NOT NULL,  -- negated because DESC indexes aren't supported :/
+  SubtreeRevision      BIGINT NOT NULL,  -- negated because DESC indexes aren't supported :/
   PRIMARY KEY(TreeId, SubtreeId, SubtreeRevision),
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE
 );
@@ -116,7 +116,6 @@ CREATE TABLE IF NOT EXISTS Unsequenced(
   -- We want this to be unique per entry per log, but queryable by FEs so that
   -- we can try to stomp dupe submissions.
   MessageId            BYTEA CHECK (MessageId IS NOT NULL And length(MessageId) <= 32),
-  Payload              BYTEA CHECK (Payload is NOT NULL),
   QueueTimestampNanos  BIGINT NOT NULL,
   PRIMARY KEY (TreeId, MessageId, QueueTimestampNanos, LeafIdentityHash)
 );
@@ -149,7 +148,7 @@ CREATE TABLE IF NOT EXISTS MapHead(
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE
 );
 
-CREATE OR REPLACE FUNCTION upsert_trees(tid INTEGER, kid BYTEA, tt VARCHAR) RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION upsert_trees(tid BIGINT, kid BYTEA, tt VARCHAR) RETURNS VOID AS $$
 DECLARE
 BEGIN
     UPDATE Trees SET KeyID = kid, TreeType = tt WHERE TreeID = tid;
@@ -159,7 +158,7 @@ BEGIN
 END;
 $$ LANGUAGE 'plpgsql';
 
-CREATE OR REPLACE FUNCTION upsert_leafdata(tid INTEGER, lih BYTEA, lv BYTEA, ed BYTEA) RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION upsert_leafdata(tid BIGINT, lih BYTEA, lv BYTEA, ed BYTEA) RETURNS VOID AS $$
 DECLARE
 BEGIN
     UPDATE LeafData SET LeafIdentityHash=lih;

@@ -48,6 +48,8 @@ type sqlLogStorage struct {
 	admin storage.AdminStorage
 }
 
+const leafSavepointName = "insert_leaf"
+
 // NewLogStorage creates a sqlLogStorage instance using the supplied database wrapper.
 // It assumes storage.AdminStorage is backed by the same MySQL database as well.
 func NewLogStorage(wrapper wrapper.DBWrapper) storage.LogStorage {
@@ -309,8 +311,12 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 		// can suppress errors unrelated to key collisions. We don't use REPLACE because
 		// if there's ever a hash collision it will do the wrong thing and it also
 		// causes a DELETE / INSERT, which is undesirable.
+		// Establish a save point here so we can recover if the leaf insert fails
+		t.ls.wrap.Savepoint(t.tx, leafSavepointName)
 		_, err := unseqLeafStmt.Exec(t.treeID, leaf.LeafIdentityHash, leaf.LeafValue, leaf.ExtraData)
 		if t.ls.wrap.IsDuplicateErr(err) {
+			// Put us back in the state we were in before we tried to do this insert
+			t.ls.wrap.RollbackToSavepoint(t.tx, leafSavepointName)
 			// Remember the duplicate leaf, using the requested leaf for now.
 			existingLeaves[leafPos.idx] = leaf
 			existingCount++
@@ -403,10 +409,15 @@ func (t *logTreeTX) GetLeavesByIndex(leaves []int64) ([]*trillian.LogLeaf, error
 	}
 	defer stmt.Close()
 	var args []interface{}
+	if !t.ls.wrap.VariableArgsFirst() {
+		args = append(args, interface{}(t.treeID))
+	}
 	for _, nodeID := range leaves {
 		args = append(args, interface{}(int64(nodeID)))
 	}
-	args = append(args, interface{}(t.treeID))
+	if t.ls.wrap.VariableArgsFirst() {
+		args = append(args, interface{}(t.treeID))
+	}
 	rows, err := stmt.Query(args...)
 	if err != nil {
 		glog.Warningf("Failed to get leaves by idx: %s", err)
@@ -572,10 +583,15 @@ func (t *logTreeTX) removeSequencedLeaves(leaves []dequeuedLeaf) error {
 func (t *logTreeTX) getLeavesByHashInternal(leafHashes [][]byte, stmt *sql.Stmt, desc string) ([]*trillian.LogLeaf, error) {
 	stx := t.tx.Stmt(stmt)
 	var args []interface{}
+	if !t.ls.wrap.VariableArgsFirst() {
+		args = append(args, interface{}(t.treeID))
+	}
 	for _, hash := range leafHashes {
 		args = append(args, interface{}([]byte(hash)))
 	}
-	args = append(args, interface{}(t.treeID))
+	if t.ls.wrap.VariableArgsFirst() {
+		args = append(args, interface{}(t.treeID))
+	}
 	rows, err := stx.Query(args...)
 	if err != nil {
 		glog.Warningf("Query() %s hash = %v", desc, err)

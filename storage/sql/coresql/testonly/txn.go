@@ -33,11 +33,19 @@ func BeginLogTx(s storage.LogStorage, logID int64, t *testing.T) storage.LogTree
 // CommittableTX is an interface for objects that support commit.
 type CommittableTX interface {
 	Commit() error
+	Rollback() error
 }
 
 // Commit commits a supplied Committable and fails a test if this does not succeed.
 func Commit(tx CommittableTX, t *testing.T) {
 	if err := tx.Commit(); err != nil {
+		t.Errorf("Failed to commit tx: %v", err)
+	}
+}
+
+// Rollback rolls back a Committable and fails if this does not succeed
+func Rollback(tx CommittableTX, t *testing.T) {
+	if err := tx.Rollback(); err != nil {
 		t.Errorf("Failed to commit tx: %v", err)
 	}
 }

@@ -165,11 +165,17 @@ func (m *mapTreeTX) Get(revision int64, indexes [][]byte) ([]trillian.MapLeaf, e
 	defer stmt.Close()
 
 	args := make([]interface{}, 0, len(indexes)+2)
+	if !m.ms.wrap.VariableArgsFirst() {
+		args = append(args, m.treeID)
+		args = append(args, revision)
+	}
 	for _, index := range indexes {
 		args = append(args, index)
 	}
-	args = append(args, m.treeID)
-	args = append(args, revision)
+	if m.ms.wrap.VariableArgsFirst() {
+		args = append(args, m.treeID)
+		args = append(args, revision)
+	}
 
 	glog.Infof("args size %d", len(args))
 

@@ -19,7 +19,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"strconv"
 	"sync"
 
 	"github.com/golang/glog"
@@ -49,8 +48,8 @@ const (
 
 	insertTreeHeadSQL = `INSERT INTO TreeHead(TreeId,TreeHeadTimestamp,TreeSize,RootHash,TreeRevision,RootSignature)
 		 VALUES($1,$2,$3,$4,$5,$6)`
-	selectActiveLogsSQL                = "SELECT TreeId from Trees where TreeType='LOG'"
-	selectActiveLogsWithUnsequencedSQL = "SELECT DISTINCT t.TreeId from Trees t INNER JOIN Unsequenced u WHERE TreeType='LOG' AND t.TreeId=u.TreeId"
+	selectActiveLogsSQL                = "SELECT TreeId from Trees WHERE TreeType='LOG'"
+	selectActiveLogsWithUnsequencedSQL = "SELECT DISTINCT t.TreeId FROM Trees t INNER JOIN Unsequenced u ON TreeType='LOG' AND t.TreeId=u.TreeId"
 	selectTreeRowSQL                   = "SELECT 1 FROM Trees WHERE TreeId = $1"
 )
 
@@ -76,7 +75,7 @@ const (
 	// leaf-selection statements.
 	selectLeavesByLeafIdentityHashSQL = `SELECT '` + dummyMerkleLeafHash + `',l.LeafIdentityHash,l.LeafValue,-1,l.ExtraData
 			FROM LeafData l
-			WHERE l.LeafIdentityHash IN (` + placeholderSQL + `) AND l.TreeId = $1`
+			WHERE l.LeafIdentityHash IN (` + placeholderSQL + `) AND l.TreeId = $1 ORDER BY l.LeafIdentityHash`
 	selectQueuedLeavesSQL = `SELECT LeafIdentityHash,MerkleLeafHash,MessageId,QueueTimestampNanos
 			FROM Unsequenced
 			WHERE TreeID=$1
@@ -88,15 +87,8 @@ const (
 			ORDER BY TreeHeadTimestamp DESC LIMIT 1`
 	insertUnsequencedEntrySQL = `INSERT INTO Unsequenced(TreeId,LeafIdentityHash,MerkleLeafHash,MessageId,QueueTimestampNanos)
 			VALUES($1,$2,$3,$4,$5)`
-	// For versions prior to 9.5 there is no ON CONFLICT support so we use a stored procedure to
-	// simulate it.
-	insertUnsequencedLeafSQL = `SELECT upsert_leafdata($1,$2,$3,$4)`
-	// For versions 9.5+ we can use ON CONFLICT directly. They statements have the same parameters
-	// so the code is the same.
-	insertUnsequencedLeafSQL95 = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
-			VALUES($1,$2,$3,$4)
-			ON CONFLICT(TreeID,LeafIdentityHash)
-			DO UPDATE SET LeafIdentityHash=$2`
+	insertUnsequencedLeafSQL = `INSERT INTO LeafData(TreeId,LeafIdentityHash,LeafValue,ExtraData)
+			VALUES($1,$2,$3,$4)`
 	insertSequencedLeafSQL = `INSERT INTO SequencedLeafData(TreeId,LeafIdentityHash,MerkleLeafHash,SequenceNumber)
 			VALUES($1,$2,$3,$4)`
 	selectSequencedLeafCountSQL = "SELECT COUNT(*) FROM SequencedLeafData WHERE TreeId=$1"
@@ -183,8 +175,6 @@ type pgSQLWrapper struct {
 	// in the query to the statement that should be used.
 	statementMutex sync.Mutex
 	statements     map[string]map[int]*sql.Stmt
-	// serverIs95 indicates whether we use postgres 9.5 featurees or not
-	serverIs95     bool
 }
 
 // NewWrapper creates and returns a DBWrapper appropriate for use with MySQL.
@@ -270,11 +260,6 @@ func (m *pgSQLWrapper) InsertUnsequencedEntryStmt(tx *sql.Tx) (*sql.Stmt, error)
 }
 
 func (m *pgSQLWrapper) InsertUnsequencedLeafStmt(tx *sql.Tx) (*sql.Stmt, error) {
-	// Switch between stored procedure and direct insert depending on if the server is
-	// 9.5 or later.
-	if m.serverIs95 {
-		return tx.Prepare(insertUnsequencedLeafSQL95)
-	}
 	return tx.Prepare(insertUnsequencedLeafSQL)
 }
 
@@ -399,13 +384,15 @@ func (m *pgSQLWrapper) getStmt(statement string, first, num int) (*sql.Stmt, err
 		return nil, err
 	}
 
-	glog.Warningf("SQL: %s", s)
-
 	m.statements[statement][num] = s
 
 	return s, nil
 }
 func (m *pgSQLWrapper) IsDuplicateErr(err error) bool {
+	// Note: This specifically checks for the entire error code (23505) related to a unique
+	// constraint violation. It might need to be extended in future depending how this code evolves.
+	// Checking for the class of constraint related errors (23) did not seem safe as it includes
+	// errors that should definitely not occur.
 	if err != nil {
 		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == errCodeDuplicate {
 			return true
@@ -416,22 +403,6 @@ func (m *pgSQLWrapper) IsDuplicateErr(err error) bool {
 }
 
 func (m *pgSQLWrapper) OnOpenDB() error {
-	// Try to get the server version and see if it's at least 9.5 to enable those features. If
-	// we can't tell we'll assume it's an old version and continue.
-	var version string
-	if err := m.db.QueryRow("SHOW server_version").Scan(&version); err == nil {
-		v := strings.SplitN(version, ".", 3)
-		major, err := strconv.ParseInt(v[0], 10, 32)
-		minor, err2 := strconv.ParseInt(v[1], 10, 32)
-
-		if err == nil && err2 == nil {
-			if major > 9 || (major == 9 && minor >= 5) {
-				m.serverIs95 = true
-				glog.V(1).Info("9.5+ server - ON CONFLICT enabled")
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -460,4 +431,14 @@ func (m *pgSQLWrapper) VariableArgsFirst() bool {
 	// want to keep the fixed parameters as $1, $2 etc. as they otherwise can't be written as
 	// literal strings - they'd change depending on the number of variable args.
 	return false
+}
+
+func (m *pgSQLWrapper) Savepoint(tx *sql.Tx, name string) error {
+	_, err := tx.Exec(fmt.Sprintf("SAVEPOINT %s", name))
+	return err
+}
+
+func (m *pgSQLWrapper) RollbackToSavepoint(tx *sql.Tx, name string) error {
+	_, err := tx.Exec(fmt.Sprintf("ROLLBACK TO SAVEPOINT %s", name))
+	return err
 }

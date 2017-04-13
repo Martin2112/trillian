@@ -65,6 +65,14 @@ type AdminStatementProvider interface {
 	UpdateTreeStmt(tx *sql.Tx) (*sql.Stmt, error)
 }
 
+// SavepointHandler abstracts the use of savepoints. In some databases they are necessary
+// because inserting a duplicate row otherwise ends the transaction. If this is not the case
+// then it is OK for the implementation to do nothing.
+type SavepointHandler interface {
+	Savepoint(tx *sql.Tx, name string) error
+	RollbackToSavepoint(tx *sql.Tx, name string) error
+}
+
 // CustomBehaviourProvider abstracts database specific features, for example error code checking.
 type CustomBehaviourProvider interface {
 	CheckDatabaseAccessible(ctx context.Context) error
@@ -90,6 +98,7 @@ type DBWrapper interface {
 	AdminStatementProvider
 	LifecycleHooks
 	CustomBehaviourProvider
+	SavepointHandler
 	DB() *sql.DB
 }
 

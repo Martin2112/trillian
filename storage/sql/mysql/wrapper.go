@@ -394,3 +394,13 @@ func (m *mySQLWrapper) VariableArgsFirst() bool {
 	// We want the variable arguments first as we don't have positional placeholders.
 	return true
 }
+
+func (m *mySQLWrapper) Savepoint(*sql.Tx, string) error {
+	// We don't require the use of savepoints
+	return nil
+}
+
+func (m *mySQLWrapper) RollbackToSavepoint(*sql.Tx, string) error {
+	// We don't require the use of savepoints
+	return nil
+}
