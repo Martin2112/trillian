@@ -56,7 +56,11 @@ script:
       fi
   - ./integration/integration_test.sh
 
-services: mysql
+services:
+  - mysql
+  - postgresql: "9.5"
 
 before_script:
   - yes | ./scripts/resetdb.sh
+  - yes | ./scripts/pgresetdb.sh
+
