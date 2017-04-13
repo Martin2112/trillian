@@ -1,8 +1,5 @@
 -- Caution - this removes all tables in our schema
 
-DROP FUNCTION upsert_trees(INTEGER, BYTEA, VARCHAR);
-DROP FUNCTION upsert_leafdata(INTEGER, BYTEA, BYTEA, BYTEA);
-
 DROP TABLE IF EXISTS Unsequenced;
 DROP TABLE IF EXISTS Subtree;
 DROP TABLE IF EXISTS SequencedLeafData;

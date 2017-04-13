@@ -147,23 +147,3 @@ CREATE TABLE IF NOT EXISTS MapHead(
   UNIQUE (TreeId, MapRevision),
   FOREIGN KEY(TreeId) REFERENCES Trees(TreeId) ON DELETE CASCADE
 );
-
-CREATE OR REPLACE FUNCTION upsert_trees(tid BIGINT, kid BYTEA, tt VARCHAR) RETURNS VOID AS $$
-DECLARE
-BEGIN
-    UPDATE Trees SET KeyID = kid, TreeType = tt WHERE TreeID = tid;
-    IF NOT FOUND THEN
-        INSERT INTO Trees VALUES(tid, kid, tt, 'SHA256', 'SHA256');
-    END IF;
-END;
-$$ LANGUAGE 'plpgsql';
-
-CREATE OR REPLACE FUNCTION upsert_leafdata(tid BIGINT, lih BYTEA, lv BYTEA, ed BYTEA) RETURNS VOID AS $$
-DECLARE
-BEGIN
-    UPDATE LeafData SET LeafIdentityHash=lih;
-    IF NOT FOUND THEN
-        INSERT INTO LeafData VALUES(tid, lih, lv, ed);
-    END IF;
-END
-$$ LANGUAGE 'plpgsql';

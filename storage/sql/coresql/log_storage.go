@@ -313,13 +313,13 @@ func (t *logTreeTX) QueueLeaves(leaves []*trillian.LogLeaf, queueTimestamp time.
 		// causes a DELETE / INSERT, which is undesirable.
 		// Establish a save point here so we can recover if the leaf insert fails
 		if err := t.ls.wrap.Savepoint(t.tx, leafSavepointName); err != nil {
-			return fmt.Errorf("create savepoint for leaf insert err=%v, want: nil", err)
+			return nil, fmt.Errorf("create savepoint for leaf insert err=%v, want: nil", err)
 		}
 		_, err := unseqLeafStmt.Exec(t.treeID, leaf.LeafIdentityHash, leaf.LeafValue, leaf.ExtraData)
 		if t.ls.wrap.IsDuplicateErr(err) {
 			// Put us back in the state we were in before we tried to do this insert
 			if err := t.ls.wrap.RollbackToSavepoint(t.tx, leafSavepointName); err != nil {
-				return fmt.Errorf("rollback to savepoint for leaf insert err=%v, want:nil", err)
+				return nil, fmt.Errorf("rollback to savepoint for leaf insert err=%v, want:nil", err)
 			}
 			// Remember the duplicate leaf, using the requested leaf for now.
 			existingLeaves[leafPos.idx] = leaf
