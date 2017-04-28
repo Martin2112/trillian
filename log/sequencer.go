@@ -74,12 +74,14 @@ func (s *Sequencer) SetGuardWindow(sequencerGuardWindow time.Duration) {
 func (s Sequencer) buildMerkleTreeFromStorageAtRoot(ctx context.Context, root trillian.SignedLogRoot, tx storage.TreeTX) (*merkle.CompactMerkleTree, error) {
 	mt, err := merkle.NewCompactMerkleTreeWithBatchState(s.hasher, root.TreeSize, func(coords []merkle.NodeCoord) ([][]byte, error) {
 		ids := []storage.NodeID{}
-		for _, c := range coords {
+		idMap := make(map[string]int)
+		for n, c := range coords {
 			nodeID, err := storage.NewNodeIDForTreeCoords(c.Depth, c.Index, maxTreeDepth)
 			if err != nil {
 				glog.Warningf("%v: Failed to create nodeID: %v", root.LogId, err)
 				return nil, err
 			}
+			idMap[nodeID.String()] = n
 			ids = append(ids, nodeID)
 		}
 
@@ -93,9 +95,9 @@ func (s Sequencer) buildMerkleTreeFromStorageAtRoot(ctx context.Context, root tr
 			return nil, fmt.Errorf("%v: Did not retrieve %d nodes while loading CompactMerkleTree, got %#v for %v @%v", root.LogId, len(coords), nodes, coords, root.TreeRevision)
 		}
 
-		hashes := [][]byte{}
+		hashes := make([][]byte, len(coords))
 		for _, n := range nodes {
-			hashes = append(hashes, n.Hash)
+			hashes[idMap[n.NodeID.String()]] = n
 		}
 
 		return hashes, nil
