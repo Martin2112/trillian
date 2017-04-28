@@ -90,7 +90,7 @@ func (s Sequencer) buildMerkleTreeFromStorageAtRoot(ctx context.Context, root tr
 		}
 
 		if nodes == nil || len(nodes) != len(coords) {
-			return nil, fmt.Errorf("%v: Did not retrieve %d nodes while loading CompactMerkleTree, got %#v for ID %v@%v", len(coords), nodes, coords, root.TreeRevision)
+			return nil, fmt.Errorf("%v: Did not retrieve %d nodes while loading CompactMerkleTree, got %#v for %v @%v", root.LogId, len(coords), nodes, coords, root.TreeRevision)
 		}
 
 		hashes := [][]byte{}
