@@ -110,7 +110,7 @@ func NewCompactMerkleTreeWithState(hasher TreeHasher, size int64, f GetNodeFunc,
 			return nil
 		})
 	}
-	err := checkExpectedRoot(r, r.root, expectedRoot)
+	err := checkExpectedRoot(r, expectedRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -174,16 +174,16 @@ func NewCompactMerkleTreeWithBatchState(hasher TreeHasher, size int64, f GetNode
 		})
 	}
 
-	err := checkExpectedRoot(r, r.root, expectedRoot)
+	err := checkExpectedRoot(r, expectedRoot)
 	if err != nil {
 		return nil, err
 	}
 	return &r, nil
 }
 
-func checkExpectedRoot(t CompactMerkleTree, got, want []byte) error {
-	if !bytes.Equal(t.root, got) {
-		log.Warningf("Corrupt state, expected root %s, got %s", hex.EncodeToString(want[:]), hex.EncodeToString(t.root[:]))
+func checkExpectedRoot(t CompactMerkleTree, want []byte) error {
+	if !bytes.Equal(t.root, want) {
+		log.Warningf("Corrupt state, expected root got: %s, want: %s", hex.EncodeToString(t.root[:]), hex.EncodeToString(want))
 		return RootHashMismatchError{ActualHash: t.root, ExpectedHash: want}
 	}
 	log.V(1).Infof("Resuming at size %d, with root: %s", t.size, base64.StdEncoding.EncodeToString(t.root[:]))
