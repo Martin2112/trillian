@@ -161,6 +161,7 @@ func NewCompactMerkleTreeWithBatchState(hasher TreeHasher, size int64, f GetNode
 		}
 
 		// Now go back and fill in the nodes from the fetched hashes
+		size = r.size
 		for depth := 0; depth < sizeBits; depth++ {
 			if size&1 == 1 {
 				r.nodes[depth] = hashes[nodeIndexMap[depth]]
