@@ -60,6 +60,17 @@ func bitLen(x int64) int {
 // Used by the CompactMerkleTree to populate itself with correct state when starting up with a non-empty tree.
 type GetNodeFunc func(depth int, index int64) ([]byte, error)
 
+// NodeCoord defines a depth, index coordinate system for Merkle tree nodes. The depth starts
+// from zero at the leaves and index starts from zero for the left-most node of each level.
+type NodeCoord struct {
+	Depth int64
+	Index int64
+}
+
+// GetNodesFunc is a function prototype which can look up a set of nodes within a non-compact Merkle tree.
+// Used by the CompactMerkleTree to populate itself with correct state when starting up with a non-empty tree.
+type GetNodesFunc func(coords []NodeCoord) ([][]byte, error)
+
 // NewCompactMerkleTreeWithState creates a new CompactMerkleTree for the passed in |size|.
 // This can fail if the nodes required to recreate the tree state cannot be fetched or the calculated
 // root hash after population does not match the value we expect.
@@ -99,12 +110,83 @@ func NewCompactMerkleTreeWithState(hasher TreeHasher, size int64, f GetNodeFunc,
 			return nil
 		})
 	}
-	if !bytes.Equal(r.root, expectedRoot) {
-		log.Warningf("Corrupt state, expected root %s, got %s", hex.EncodeToString(expectedRoot[:]), hex.EncodeToString(r.root[:]))
-		return nil, RootHashMismatchError{ActualHash: r.root, ExpectedHash: expectedRoot}
+	err := checkExpectedRoot(r, r.root, expectedRoot)
+	if err != nil {
+		return nil, err
 	}
-	log.V(1).Infof("Resuming at size %d, with root: %s", r.size, base64.StdEncoding.EncodeToString(r.root[:]))
 	return &r, nil
+}
+
+// NewCompactMerkleTreeWithBatchState creates a new CompactMerkleTree for the passed in |size|.
+// This can fail if the nodes required to recreate the tree state cannot be fetched or the calculated
+// root hash after population does not match the value we expect.
+// |f| will be called once with the list of co-ordinates of internal MerkleTree nodes whose hash values are
+// required to initialize the internal state of the CompactMerkleTree.  |expectedRoot| is the known-good tree root
+// of the tree at |size|, and is used to verify the correct initial state of the CompactMerkleTree after initialisation.
+func NewCompactMerkleTreeWithBatchState(hasher TreeHasher, size int64, f GetNodesFunc, expectedRoot []byte) (*CompactMerkleTree, error) {
+	sizeBits := bitLen(size)
+
+	r := CompactMerkleTree{
+		hasher: hasher,
+		nodes:  make([][]byte, sizeBits),
+		root:   hasher.HashEmpty(),
+		size:   size,
+	}
+
+	if isPerfectTree(size) {
+		log.V(1).Info("Is perfect tree.")
+		r.root = append(make([]byte, 0, len(expectedRoot)), expectedRoot...)
+		r.nodes[sizeBits-1] = r.root
+	} else {
+		coords := []NodeCoord{}
+		// We use this map because there might not be a fetch at every level
+		nodeIndexMap := make(map[int]int)
+		// Get a list of node coordinates we need to fetch the nodes that will repopulate our
+		// compact tree. Track which node populates each level.
+		for depth := 0; depth < sizeBits; depth++ {
+			if size&1 == 1 {
+				index := size - 1
+				log.V(1).Infof("fetching d: %d i: %d, leaving size %d", depth, index, size)
+				nodeIndexMap[depth] = len(coords)
+				coords = append(coords, NodeCoord{Depth: int64(depth), Index: index})
+			}
+			size >>= 1
+		}
+
+		// Request all the nodes at once
+		hashes, err := f(coords)
+		if err != nil || len(hashes) != len(coords) {
+			log.Warningf("Failed to fetch nodes for CMT: %v %v", coords, err)
+			return nil, err
+		}
+
+		// Now go back and fill in the nodes from the fetched hashes
+		for depth := 0; depth < sizeBits; depth++ {
+			if size&1 == 1 {
+				r.nodes[depth] = hashes[nodeIndexMap[depth]]
+			}
+			size >>= 1
+		}
+		// Recalculate and check the expected root
+		r.recalculateRoot(func(depth int, index int64, hash []byte) error {
+			return nil
+		})
+	}
+
+	err := checkExpectedRoot(r, r.root, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func checkExpectedRoot(t CompactMerkleTree, got, want []byte) error {
+	if !bytes.Equal(t.root, got) {
+		log.Warningf("Corrupt state, expected root %s, got %s", hex.EncodeToString(want[:]), hex.EncodeToString(t.root[:]))
+		return RootHashMismatchError{ActualHash: t.root, ExpectedHash: want}
+	}
+	log.V(1).Infof("Resuming at size %d, with root: %s", t.size, base64.StdEncoding.EncodeToString(t.root[:]))
+	return nil
 }
 
 // NewCompactMerkleTree creates a new CompactMerkleTree with size zero. This always succeeds.

@@ -71,28 +71,34 @@ func (s *Sequencer) SetGuardWindow(sequencerGuardWindow time.Duration) {
 	s.sequencerGuardWindow = sequencerGuardWindow
 }
 
-// TODO: This currently doesn't use the batch api for fetching the required nodes. This
-// would be more efficient but requires refactoring.
 func (s Sequencer) buildMerkleTreeFromStorageAtRoot(ctx context.Context, root trillian.SignedLogRoot, tx storage.TreeTX) (*merkle.CompactMerkleTree, error) {
-	mt, err := merkle.NewCompactMerkleTreeWithState(s.hasher, root.TreeSize, func(depth int, index int64) ([]byte, error) {
-		nodeID, err := storage.NewNodeIDForTreeCoords(int64(depth), index, maxTreeDepth)
-		if err != nil {
-			glog.Warningf("%v: Failed to create nodeID: %v", root.LogId, err)
-			return nil, err
+	mt, err := merkle.NewCompactMerkleTreeWithBatchState(s.hasher, root.TreeSize, func(coords []merkle.NodeCoord) ([][]byte, error) {
+		ids := []storage.NodeID{}
+		for _, c := range coords {
+			nodeID, err := storage.NewNodeIDForTreeCoords(c.Depth, c.Index, maxTreeDepth)
+			if err != nil {
+				glog.Warningf("%v: Failed to create nodeID: %v", root.LogId, err)
+				return nil, err
+			}
+			ids = append(ids, nodeID)
 		}
-		nodes, err := tx.GetMerkleNodes(root.TreeRevision, []storage.NodeID{nodeID})
 
+		nodes, err := tx.GetMerkleNodes(root.TreeRevision, ids)
 		if err != nil {
 			glog.Warningf("%v: Failed to get Merkle nodes: %v", root.LogId, err)
 			return nil, err
 		}
 
-		// We expect to get exactly one node here
-		if nodes == nil || len(nodes) != 1 {
-			return nil, fmt.Errorf("%v: Did not retrieve one node while loading CompactMerkleTree, got %#v for ID %v@%v", root.LogId, nodes, nodeID.String(), root.TreeRevision)
+		if nodes == nil || len(nodes) != len(coords) {
+			return nil, fmt.Errorf("%v: Did not retrieve %d nodes while loading CompactMerkleTree, got %#v for ID %v@%v", len(coords), nodes, coords, root.TreeRevision)
 		}
 
-		return nodes[0].Hash, nil
+		hashes := [][]byte{}
+		for _, n := range nodes {
+			hashes = append(hashes, n.Hash)
+		}
+
+		return hashes, nil
 	}, root.RootHash)
 
 	return mt, err
