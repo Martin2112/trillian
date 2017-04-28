@@ -97,7 +97,7 @@ func (s Sequencer) buildMerkleTreeFromStorageAtRoot(ctx context.Context, root tr
 
 		hashes := make([][]byte, len(coords))
 		for _, n := range nodes {
-			hashes[idMap[n.NodeID.String()]] = n
+			hashes[idMap[n.NodeID.String()]] = n.Hash
 		}
 
 		return hashes, nil
