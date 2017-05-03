@@ -134,7 +134,7 @@ func DumpToLog(ctx context.Context, d time.Duration) {
 
 // isDup tests if a named metric already exists. Must hold the mutex before calling
 // this.
-func (m safeMetrics) isDup(name string) bool {
+func (m *safeMetrics) isDup(name string) bool {
 	if dup := metrics.cm[name]; dup != nil {
 		return true
 	}
