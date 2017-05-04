@@ -20,7 +20,7 @@ option java_outer_classname = "TrillianApiProto";
 
 package trillian;
 
-import "trillian.proto";
+import "github.com/google/trillian/trillian.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/empty.proto";

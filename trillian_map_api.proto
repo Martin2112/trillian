@@ -20,7 +20,7 @@ option java_outer_classname = "TrillianApiProto";
 
 package trillian;
 
-import "trillian.proto";
+import "github.com/google/trillian/trillian.proto";
 
 // MapLeaf represents the data behind Map leaves.
 message MapLeaf {
