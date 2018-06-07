@@ -90,6 +90,10 @@ func NewLogStorage(client *spanner.Client) storage.LogStorage {
 // NewLogStorageWithOpts initialises and returns a new LogStorage.
 // The opts parameter can be used to enable custom workarounds.
 func NewLogStorageWithOpts(client *spanner.Client, opts LogStorageOptions, mf monitoring.MetricFactory) storage.LogStorage {
+	if mf == nil {
+		mf = monitoring.InertMetricFactory{}
+	}
+
 	if opts.DequeueAcrossMerkleBucketsRangeFraction <= 0 || opts.DequeueAcrossMerkleBucketsRangeFraction > 1.0 {
 		opts.DequeueAcrossMerkleBucketsRangeFraction = 1.0
 	}
