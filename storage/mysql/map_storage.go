@@ -99,7 +99,7 @@ func (m *mySQLMapStorage) begin(ctx context.Context, tree *trillian.Tree, readon
 		return nil, err
 	}
 
-	stCache := cache.NewMapSubtreeCache(defaultMapStrata, tree.TreeId, hasher)
+	stCache := cache.NewMapSubtreeCache(defaultMapStrata, tree.TreeId, hasher, nil /* metric factory */)
 	ttx, err := m.beginTreeTx(ctx, tree, hasher.Size(), stCache)
 	if err != nil {
 		return nil, err

@@ -19,14 +19,15 @@ import (
 
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/merkle/hashers"
+	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/storagepb"
 )
 
 // NewLogSubtreeCache creates and returns a SubtreeCache appropriate for use with a log
 // tree. The caller must supply the strata depths to be used and a suitable LogHasher.
-func NewLogSubtreeCache(logStrata []int, hasher hashers.LogHasher) SubtreeCache {
-	return NewSubtreeCache(logStrata, populateLogSubtreeNodes(hasher), prepareLogSubtreeWrite())
+func NewLogSubtreeCache(logStrata []int, hasher hashers.LogHasher, mf monitoring.MetricFactory) SubtreeCache {
+	return NewSubtreeCache(logStrata, populateLogSubtreeNodes(hasher), prepareLogSubtreeWrite(), mf)
 }
 
 // LogPopulateFunc obtains a log storage population function based on a supplied LogHasher.

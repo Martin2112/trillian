@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/storagepb"
 )
@@ -59,6 +60,17 @@ const (
 	maxLogDepth = 64
 )
 
+var (
+	once sync.Once
+
+	cacheHits       monitoring.Counter
+	cacheMisses     monitoring.Counter
+	preloads        monitoring.Counter
+	preloadNodes    monitoring.Counter
+	subtreesRead    monitoring.Counter
+	subtreesWritten monitoring.Counter
+)
+
 // SubtreeCache provides a caching access to Subtree storage. Currently there are assumptions
 // in the code that all subtrees are multiple of 8 in depth and that log subtrees are always
 // of depth 8. It is not possible to just change the constants above and have things still
@@ -86,7 +98,15 @@ type SubtreeCache struct {
 // internal nodes given its leaves, and will be called for each subtree loaded
 // from storage.
 // TODO(al): consider supporting different sized subtrees - for now everything's subtrees of 8 levels.
-func NewSubtreeCache(strataDepths []int, populateSubtree storage.PopulateSubtreeFunc, prepareSubtreeWrite storage.PrepareSubtreeWriteFunc) SubtreeCache {
+func NewSubtreeCache(strataDepths []int, populateSubtree storage.PopulateSubtreeFunc, prepareSubtreeWrite storage.PrepareSubtreeWriteFunc, mf monitoring.MetricFactory) SubtreeCache {
+	if mf == nil {
+		mf = monitoring.InertMetricFactory{}
+	}
+
+	once.Do(func() {
+		createMetrics(mf)
+	})
+
 	// TODO(al): pass this in
 	maxTreeDepth := maxSupportedTreeDepth
 	// Precalculate strata information based on the passed in strata depths:
@@ -140,6 +160,7 @@ func (s *SubtreeCache) splitNodeID(id storage.NodeID) ([]byte, storage.Suffix) {
 func (s *SubtreeCache) preload(ids []storage.NodeID, getSubtrees GetSubtreesFunc) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	preloads.Inc()
 
 	// Figure out the set of subtrees we need:
 	want := make(map[string]*storage.NodeID)
@@ -158,6 +179,8 @@ func (s *SubtreeCache) preload(ids []storage.NodeID, getSubtrees GetSubtreesFunc
 	if len(want) == 0 {
 		return nil
 	}
+
+	preloadNodes.Add(float64(len(want)))
 
 	list := make([]storage.NodeID, 0, len(want))
 	for _, v := range want {
@@ -246,9 +269,11 @@ func (s *SubtreeCache) getNodeHashUnderLock(id storage.NodeID, getSubtree GetSub
 	px, sx := s.splitNodeID(id)
 	prefixKey := string(px)
 	c := s.subtrees[prefixKey]
+	subtreesRead.Inc()
 	if c == nil {
 		glog.V(1).Infof("Cache miss for %x so we'll try to fetch from storage", prefixKey)
 		// Cache miss, so we'll try to fetch from storage.
+		cacheMisses.Inc()
 		subID := id
 		subID.PrefixLenBits = len(px) * depthQuantum // this won't work if depthQuantum changes
 		var err error
@@ -268,6 +293,8 @@ func (s *SubtreeCache) getNodeHashUnderLock(id storage.NodeID, getSubtree GetSub
 		}
 
 		s.subtrees[prefixKey] = c
+	} else {
+		cacheHits.Inc()
 	}
 
 	// finally look for the particular node within the subtree so we can return
@@ -384,6 +411,7 @@ func (s *SubtreeCache) Flush(setSubtrees SetSubtreesFunc) error {
 	if len(treesToWrite) == 0 {
 		return nil
 	}
+	subtreesWritten.Add(float64(len(treesToWrite)))
 	return setSubtrees(treesToWrite)
 }
 
@@ -399,4 +427,13 @@ func (s *SubtreeCache) newEmptySubtree(id storage.NodeID, px []byte) *storagepb.
 		Leaves:        make(map[string][]byte),
 		InternalNodes: make(map[string][]byte),
 	}
+}
+
+func createMetrics(mf monitoring.MetricFactory) {
+	cacheHits = mf.NewCounter("subtree_cache_hits", "Total number of subtree cache read hits")
+	cacheMisses = mf.NewCounter("subtree_cache_misses", "Total number of subtree cache read misses")
+	preloads = mf.NewCounter("subtree_preloads", "Number of preload operations started")
+	preloadNodes = mf.NewCounter("subtree_preload_nodes", "Total number of nodes requested for preload")
+	subtreesRead = mf.NewCounter("subtree_reads", "Total number of subtrees read (should == hits+misses)")
+	subtreesWritten = mf.NewCounter("subtree_writes", "Total number of subtrees written (via Flush())")
 }

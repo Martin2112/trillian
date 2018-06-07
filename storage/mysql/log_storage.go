@@ -232,7 +232,7 @@ func (m *mySQLLogStorage) beginInternal(ctx context.Context, tree *trillian.Tree
 		return nil, err
 	}
 
-	stCache := cache.NewLogSubtreeCache(defaultLogStrata, hasher)
+	stCache := cache.NewLogSubtreeCache(defaultLogStrata, hasher, m.metricFactory)
 	ttx, err := m.beginTreeTx(ctx, tree, hasher.Size(), stCache)
 	if err != nil && err != storage.ErrTreeNeedsInit {
 		return nil, err

@@ -141,7 +141,7 @@ func (m *memoryLogStorage) beginInternal(ctx context.Context, tree *trillian.Tre
 		return nil, err
 	}
 
-	stCache := cache.NewLogSubtreeCache(defaultLogStrata, hasher)
+	stCache := cache.NewLogSubtreeCache(defaultLogStrata, hasher, nil /* metric factory */)
 	ttx, err := m.memoryTreeStorage.beginTreeTX(ctx, tree.TreeId, hasher.Size(), stCache, readonly)
 	if err != nil {
 		return nil, err

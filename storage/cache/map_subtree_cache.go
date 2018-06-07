@@ -22,14 +22,15 @@ import (
 	"github.com/golang/glog"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/merkle/hashers"
+	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/storagepb"
 )
 
 // NewMapSubtreeCache creates and returns a SubtreeCache appropriate for use with a map
 // tree. The caller must supply the strata depths to be used, the treeID and a suitable MapHasher.
-func NewMapSubtreeCache(mapStrata []int, treeID int64, hasher hashers.MapHasher) SubtreeCache {
-	return NewSubtreeCache(mapStrata, populateMapSubtreeNodes(treeID, hasher), prepareMapSubtreeWrite())
+func NewMapSubtreeCache(mapStrata []int, treeID int64, hasher hashers.MapHasher, mf monitoring.MetricFactory) SubtreeCache {
+	return NewSubtreeCache(mapStrata, populateMapSubtreeNodes(treeID, hasher), prepareMapSubtreeWrite(), mf)
 }
 
 // populateMapSubtreeNodes re-creates Map subtree's InternalNodes from the

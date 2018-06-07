@@ -67,6 +67,7 @@ func warn() {
 
 type cloudSpannerProvider struct {
 	client *spanner.Client
+	mf     monitoring.MetricFactory
 }
 
 func configFromFlags() spanner.ClientConfig {
@@ -86,6 +87,10 @@ func newCloudSpannerStorageProvider(mf monitoring.MetricFactory) (StorageProvide
 	csMu.Lock()
 	defer csMu.Unlock()
 
+	if mf == nil {
+		mf = monitoring.InertMetricFactory{}
+	}
+
 	if csStorageInstance != nil {
 		return csStorageInstance, nil
 	}
@@ -96,6 +101,7 @@ func newCloudSpannerStorageProvider(mf monitoring.MetricFactory) (StorageProvide
 	}
 	csStorageInstance = &cloudSpannerProvider{
 		client: client,
+		mf:     mf,
 	}
 	return csStorageInstance, nil
 }
@@ -114,7 +120,7 @@ func (s *cloudSpannerProvider) LogStorage() storage.LogStorage {
 	if *csReadOnlyStaleness > 0 {
 		opts.ReadOnlyStaleness = *csReadOnlyStaleness
 	}
-	return cloudspanner.NewLogStorageWithOpts(s.client, opts)
+	return cloudspanner.NewLogStorageWithOpts(s.client, opts, s.mf)
 }
 
 func (s *cloudSpannerProvider) MapStorage() storage.MapStorage {

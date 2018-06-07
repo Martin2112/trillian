@@ -28,6 +28,7 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	"github.com/google/trillian"
 	"github.com/google/trillian/merkle/hashers"
+	"github.com/google/trillian/monitoring"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/cache"
 	"github.com/google/trillian/storage/cloudspanner/spannerpb"
@@ -83,18 +84,19 @@ var (
 
 // NewLogStorage initialises and returns a new LogStorage.
 func NewLogStorage(client *spanner.Client) storage.LogStorage {
-	return NewLogStorageWithOpts(client, LogStorageOptions{})
+	return NewLogStorageWithOpts(client, LogStorageOptions{}, nil)
 }
 
 // NewLogStorageWithOpts initialises and returns a new LogStorage.
 // The opts parameter can be used to enable custom workarounds.
-func NewLogStorageWithOpts(client *spanner.Client, opts LogStorageOptions) storage.LogStorage {
+func NewLogStorageWithOpts(client *spanner.Client, opts LogStorageOptions, mf monitoring.MetricFactory) storage.LogStorage {
 	if opts.DequeueAcrossMerkleBucketsRangeFraction <= 0 || opts.DequeueAcrossMerkleBucketsRangeFraction > 1.0 {
 		opts.DequeueAcrossMerkleBucketsRangeFraction = 1.0
 	}
 	ret := &logStorage{
 		ts:   newTreeStorageWithOpts(client, opts.TreeStorageOptions),
 		opts: opts,
+		mf:   mf,
 	}
 
 	return ret
@@ -107,8 +109,11 @@ type logStorage struct {
 	// logStorage.
 	ts *treeStorage
 
-	// Additional options applied to this logStorage
+	// Additional options applied to this logStorage.
 	opts LogStorageOptions
+
+	// Metrics factory used to create / export metrics.
+	mf monitoring.MetricFactory
 }
 
 func (ls *logStorage) CheckDatabaseAccessible(ctx context.Context) error {
@@ -131,16 +136,16 @@ func (ls *logStorage) Snapshot(ctx context.Context) (storage.ReadOnlyLogTX, erro
 	return &readOnlyLogTX{snapshotTX}, nil
 }
 
-func newLogCache(tree *trillian.Tree) (cache.SubtreeCache, error) {
+func (ls *logStorage) newLogCache(tree *trillian.Tree) (cache.SubtreeCache, error) {
 	hasher, err := hashers.NewLogHasher(tree.HashStrategy)
 	if err != nil {
 		return cache.SubtreeCache{}, err
 	}
-	return cache.NewLogSubtreeCache(defLogStrata, hasher), nil
+	return cache.NewLogSubtreeCache(defLogStrata, hasher, ls.mf), nil
 }
 
 func (ls *logStorage) begin(ctx context.Context, tree *trillian.Tree, readonly bool, stx spanRead) (*logTX, error) {
-	tx, err := ls.ts.begin(ctx, tree, newLogCache, stx)
+	tx, err := ls.ts.begin(ctx, tree, ls.newLogCache, stx)
 	if err != nil {
 		return nil, err
 	}
