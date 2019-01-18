@@ -432,3 +432,6 @@ client.
 | Enable detection of split-view           |  Yes, efficiently      |  Yes, efficiently      |  Yes, efficiently          |
 
 - [1] -- although full audit is required to verify complete correct operation
+
+Test change to see if travis works on master.
+
