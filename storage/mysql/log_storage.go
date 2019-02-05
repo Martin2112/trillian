@@ -57,26 +57,27 @@ const (
 			ORDER BY TreeHeadTimestamp DESC LIMIT 1`
 
 	selectLeavesByRangeSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData,l.QueueTimestampNanos,s.IntegrateTimestampNanos
-			FROM LeafData l,SequencedLeafData s
-			WHERE l.LeafIdentityHash = s.LeafIdentityHash
-			AND s.SequenceNumber >= ? AND s.SequenceNumber < ? AND l.TreeId = ? AND s.TreeId = l.TreeId` + orderBySequenceNumberSQL
+			FROM LeafData l
+      INNER JOIN SequencedLeafData s USING (LeafIdentityHash)
+			WHERE s.SequenceNumber >= ? AND s.SequenceNumber < ? AND l.TreeId = ? AND s.TreeId = l.TreeId` + orderBySequenceNumberSQL
 
 	// These statements need to be expanded to provide the correct number of parameter placeholders.
 	selectLeavesByIndexSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData,l.QueueTimestampNanos,s.IntegrateTimestampNanos
-			FROM LeafData l,SequencedLeafData s
-			WHERE l.LeafIdentityHash = s.LeafIdentityHash
-			AND s.SequenceNumber IN (` + placeholderSQL + `) AND l.TreeId = ? AND s.TreeId = l.TreeId`
+			FROM LeafData l
+			INNER JOIN SequencedLeafData s USING (LeafIdentityHash, TreeId)
+			WHERE s.SequenceNumber IN (` + placeholderSQL + `) AND l.TreeId = ?`
 	selectLeavesByMerkleHashSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData,l.QueueTimestampNanos,s.IntegrateTimestampNanos
-			FROM LeafData l,SequencedLeafData s
-			WHERE l.LeafIdentityHash = s.LeafIdentityHash
-			AND s.MerkleLeafHash IN (` + placeholderSQL + `) AND l.TreeId = ? AND s.TreeId = l.TreeId`
+			FROM LeafData l
+			INNER JOIN SequencedLeafData s USING (LeafIdentityHash, TreeId)
+			WHERE s.MerkleLeafHash IN (` + placeholderSQL + `) AND l.TreeId = ?`
 	// TODO(drysdale): rework the code so the dummy hash isn't needed (e.g. this assumes hash size is 32)
-	dummyMerkleLeafHash = "00000000000000000000000000000000"
 	// This statement returns a dummy Merkle leaf hash value (which must be
 	// of the right size) so that its signature matches that of the other
 	// leaf-selection statements.
+	dummyMerkleLeafHash               = "00000000000000000000000000000000"
 	selectLeavesByLeafIdentityHashSQL = `SELECT '` + dummyMerkleLeafHash + `',l.LeafIdentityHash,l.LeafValue,-1,l.ExtraData,l.QueueTimestampNanos,s.IntegrateTimestampNanos
-			FROM LeafData l LEFT JOIN SequencedLeafData s ON (l.LeafIdentityHash = s.LeafIdentityHash AND l.TreeID = s.TreeID)
+			FROM LeafData l
+      INNER JOIN SequencedLeafData s USING (LeafIdentityHash, TreeID)
 			WHERE l.LeafIdentityHash IN (` + placeholderSQL + `) AND l.TreeId = ?`
 
 	// Same as above except with leaves ordered by sequence so we only incur this cost when necessary
@@ -854,11 +855,6 @@ func (t *logTreeTX) getLeavesByHashInternal(ctx context.Context, leafHashes [][]
 	var ret []*trillian.LogLeaf
 	for rows.Next() {
 		leaf := &trillian.LogLeaf{}
-		// We might be using a LEFT JOIN in our statement, so leaves which are
-		// queued but not yet integrated will have a NULL IntegrateTimestamp
-		// when there's no corresponding entry in SequencedLeafData, even though
-		// the table definition forbids that, so we use a nullable type here and
-		// check its validity below.
 		var integrateTS sql.NullInt64
 		var queueTS int64
 
@@ -871,11 +867,9 @@ func (t *logTreeTX) getLeavesByHashInternal(ctx context.Context, leafHashes [][]
 		if err != nil {
 			return nil, fmt.Errorf("got invalid queue timestamp: %v", err)
 		}
-		if integrateTS.Valid {
-			leaf.IntegrateTimestamp, err = ptypes.TimestampProto(time.Unix(0, integrateTS.Int64))
-			if err != nil {
-				return nil, fmt.Errorf("got invalid integrate timestamp: %v", err)
-			}
+		leaf.IntegrateTimestamp, err = ptypes.TimestampProto(time.Unix(0, integrateTS.Int64))
+		if err != nil {
+			return nil, fmt.Errorf("got invalid integrate timestamp: %v", err)
 		}
 
 		if got, want := len(leaf.MerkleLeafHash), t.hashSizeBytes; got != want {
