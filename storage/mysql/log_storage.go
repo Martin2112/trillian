@@ -58,8 +58,8 @@ const (
 
 	selectLeavesByRangeSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData,l.QueueTimestampNanos,s.IntegrateTimestampNanos
 			FROM LeafData l
-      INNER JOIN SequencedLeafData s USING (LeafIdentityHash)
-			WHERE s.SequenceNumber >= ? AND s.SequenceNumber < ? AND l.TreeId = ? AND s.TreeId = l.TreeId` + orderBySequenceNumberSQL
+      INNER JOIN SequencedLeafData s USING (LeafIdentityHash, TreeId)
+			WHERE s.SequenceNumber >= ? AND s.SequenceNumber < ? AND l.TreeId = ?` + orderBySequenceNumberSQL
 
 	// These statements need to be expanded to provide the correct number of parameter placeholders.
 	selectLeavesByIndexSQL = `SELECT s.MerkleLeafHash,l.LeafIdentityHash,l.LeafValue,s.SequenceNumber,l.ExtraData,l.QueueTimestampNanos,s.IntegrateTimestampNanos
