@@ -173,7 +173,8 @@ func main() {
 			return nil
 		},
 		RegisterServerFn: func(s *grpc.Server, _ extension.Registry) error {
-			tpb.RegisterTrillianLogSequencerServer(s, &struct{}{})
+			// TODO(Martin2112): Register a real sequencer service when it's been defined.
+			tpb.RegisterTrillianLogSequencerServer(s, &tpb.UnimplementedTrillianLogSequencerServer{})
 			return nil
 		},
 		IsHealthy:       sp.AdminStorage().CheckDatabaseAccessible,

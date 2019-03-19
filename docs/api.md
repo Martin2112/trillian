@@ -43,6 +43,8 @@
   
 
 - [trillian_log_sequencer_api.proto](#trillian_log_sequencer_api.proto)
+    - [SequenceRequest](#trillian.SequenceRequest)
+    - [SequenceResponse](#trillian.SequenceResponse)
   
   
   
@@ -690,6 +692,26 @@ Warning: This RPC is under development, don&#39;t use it. |
 ## trillian_log_sequencer_api.proto
 
 
+
+<a name="trillian.SequenceRequest"></a>
+
+### SequenceRequest
+
+
+
+
+
+
+
+<a name="trillian.SequenceResponse"></a>
+
+### SequenceResponse
+
+
+
+
+
+
  
 
  
@@ -704,6 +726,7 @@ The API supports sequencing in the Trillian Log Sequencer.
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
+| Nop | [SequenceRequest](#trillian.SequenceRequest) | [SequenceResponse](#trillian.SequenceResponse) |  |
 
  
 
