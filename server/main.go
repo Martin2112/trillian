@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3"
 	"github.com/golang/glog"
 	"github.com/google/trillian"
 	"github.com/google/trillian/extension"
@@ -37,7 +37,7 @@ import (
 	"google.golang.org/grpc/naming"
 	"google.golang.org/grpc/reflection"
 
-	etcdnaming "github.com/coreos/etcd/clientv3/naming"
+	etcdnaming "go.etcd.io/etcd/clientv3/naming"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 )
 

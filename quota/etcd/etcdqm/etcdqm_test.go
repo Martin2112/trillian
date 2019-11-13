@@ -21,7 +21,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/coreos/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian/quota"
 	"github.com/google/trillian/quota/etcd/storage"

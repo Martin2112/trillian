@@ -18,7 +18,7 @@ package quotaapi
 import (
 	"context"
 
-	"github.com/coreos/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3"
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/trillian/quota/etcd/quotapb"
